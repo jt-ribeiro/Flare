@@ -1,0 +1,28 @@
+export const DEFAULTS = {
+  look: "teknoStrobe",
+  intensity: 0.72,
+  source: "none",
+  bassReact: 0.7,
+  bassFlash: true,
+  bassShake: true,
+  bassZoom: false,
+  bassRgb: false,
+  rotate: false,
+  rotateSec: 30,
+  randomMode: "free_tekno",
+  category: "all",
+  hueShift: 0,
+  bpm: 124,
+  camMode: "auto",
+  camMix: 0.5,
+  motionMask: 0.0,
+};
+
+export const ROTATE_OPTIONS = [
+  { sec: 20, label: "20 s" },
+  { sec: 30, label: "30 s" },
+  { sec: 45, label: "45 s" },
+  { sec: 60, label: "1 min" },
+  { sec: 120, label: "2 min" },
+  { sec: 300, label: "5 min" },
+];

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="pt">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FLARE · palco</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23070708'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%237dffd4'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/css/stage.css" />
+  </head>
+  <body class="waiting-cam">
+    <canvas id="stage"></canvas>
+    <div id="camGate" class="gate">
+      <div class="gate-card">
+        <p class="kicker">FLARE</p>
+        <h1>Liga a câmara</h1>
+        <p id="gateLead">O restyle precisa do vídeo da sala. Sem câmara não há palco.</p>
+        <button type="button" id="btnGrantCam" class="gate-btn">Permitir câmara deste PC</button>
+        <p class="or">Se este PC não tiver câmara, filma com o telemóvel — mesmo Wi-Fi</p>
+        <img id="gateQr" alt="QR da câmara do telemóvel" />
+        <a id="gateRemoteLink" href="/remote?cam=1"></a>
+        <p id="gateCert" class="fine">No telemóvel o QR é HTTPS. Aviso de certificado: Avançado → continuar. É local, não é um site público. Depois toca Ligar câmara.</p>
+        <div id="gateError" class="error" hidden></div>
+      </div>
+    </div>
+    <button type="button" id="btnExitAuto" class="exit-auto-btn" hidden title="Sair do modo AUTO (Esc)">✕</button>
+
+    <div id="hud" hidden>
+      <header class="top">
+        <div class="brand">
+          <span class="dot" id="liveDot"></span>
+          <strong>FLARE</strong>
+          <span class="look-name" id="lookName">Tekno Strobe</span>
+          <div class="bass-meter" title="Baixo"><i id="bassMeter"></i></div>
+          <div class="cam-badges" id="camBadges">
+            <span class="cam-badge" id="badgeCamA" title="Câmara A (PC)">A: PC <i class="indicator"></i></span>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="button" id="btnAuto" class="btn-auto-rave" title="Modo Showtime Autónomo Fullscreen">⚡ AUTO</button>
+          <button type="button" id="btnToggleDock" class="ghost" title="Mostrar/Ocultar Controlos">🎛️ Painel</button>
+          <button type="button" id="btnCam" class="ghost" title="Ligar câmara do PC">Câmara</button>
+          <button type="button" id="btnMic" class="ghost" title="Ligar áudio da sala">Som</button>
+          <button type="button" id="btnRec" class="ghost" title="Gravar vídeo">Gravar</button>
+          <button type="button" id="btnFull" class="primary" title="Ecrã inteiro">⛶</button>
+        </div>
+      </header>
+
+      <aside class="qr-panel" id="qrPanel">
+        <video id="rawPreview" autoplay muted playsinline></video>
+        <img id="qr" alt="QR do remoto" />
+        <p>Câmara / comando no telemóvel</p>
+        <a id="remoteLink" href="/remote?cam=1" target="_blank" rel="noreferrer"></a>
+      </aside>
+
+      <footer class="dock" id="dock">
+        <div class="dock-tabs">
+          <button type="button" class="dock-tab active" data-tab="tabVisuals">🎨 VISUAIS</button>
+          <button type="button" class="dock-tab" data-tab="tabCameras">📹 CÂMARAS</button>
+          <button type="button" class="dock-tab" data-tab="tabMods">⚡ MODS & FX</button>
+        </div>
+
+        <!-- TAB 1: VISUAIS -->
+        <div class="dock-pane active" id="tabVisuals">
+          <div class="pane-row">
+            <div class="cat-bar" id="catBar"></div>
+            <div class="slider-inline">
+              <span>Intensidade</span>
+              <input id="intensity" type="range" min="0" max="100" value="72" />
+            </div>
+          </div>
+          <div id="looks" class="looks"></div>
+        </div>
+
+        <!-- TAB 2: CÂMARAS (Multi-Phone + Mix) -->
+        <div class="dock-pane" id="tabCameras">
+          <div class="cam-control-grid">
+            <div class="cam-subpanel">
+              <span class="subpanel-title">📱 CÂMARAS MÓVEIS (TELEFONES)</span>
+              <div class="chips" id="phoneListChips">
+                <span class="no-phones-hint">Lê o QR com o telemóvel para ligar câmaras em direto</span>
+              </div>
+            </div>
+            <div class="cam-subpanel">
+              <span class="subpanel-title">🎛️ MODOS DE REALIZAÇÃO</span>
+              <div class="chips" id="camModeChips">
+                <button type="button" class="chip active" data-cam="auto">AUTO</button>
+                <button type="button" class="chip" data-cam="a">PC (A)</button>
+                <button type="button" class="chip" data-cam="b">TEL (B)</button>
+                <button type="button" class="chip" data-cam="crossfade">FADER A/B</button>
+                <button type="button" class="chip" data-cam="pip_a">PIP DJ</button>
+                <button type="button" class="chip" data-cam="pip_b">PIP PISTA</button>
+                <button type="button" class="chip" data-cam="split">SPLIT 50/50</button>
+              </div>
+            </div>
+            <div class="cam-fader-bar">
+              <span class="fader-tag">A (PC)</span>
+              <input id="camFader" type="range" min="0" max="100" value="50" title="Crossfader A/B" />
+              <span class="fader-tag">B (TEL)</span>
+              <span class="fader-val" id="camFaderVal">50/50</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: MODS & FX -->
+        <div class="dock-pane" id="tabMods">
+          <div class="mods-grid">
+            <div class="mod-card">
+              <span>👤 Silhueta Dançarinos (GPU)</span>
+              <div class="slider-row">
+                <input id="motionMaskSlider" type="range" min="0" max="100" value="0" />
+                <button type="button" id="btnMotionMaskToggle" class="chip">Dançarinos</button>
+              </div>
+            </div>
+            <div class="mod-card">
+              <span>🎨 Cor / Tint Global</span>
+              <input id="hueShift" type="range" min="0" max="100" value="0" />
+            </div>
+            <div class="mod-card">
+              <span>🔊 Reação ao Baixo</span>
+              <input id="bassAmount" type="range" min="0" max="100" value="70" />
+              <div class="chips" id="bassChips">
+                <button type="button" class="chip active" data-bass="bassFlash">Flash</button>
+                <button type="button" class="chip active" data-bass="bassShake">Vibração</button>
+                <button type="button" class="chip" data-bass="bassZoom">Zoom</button>
+                <button type="button" class="chip" data-bass="bassRgb">RGB</button>
+              </div>
+            </div>
+            <div class="mod-card">
+              <span>⏱️ Ritmo / Vibe</span>
+              <div class="rhythm-row">
+                <button type="button" id="btnTap" class="chip tap-btn">TAP <b id="bpmVal">124</b> <small>BPM</small></button>
+                <select id="randomModeSelect" title="Vibe do Rodízio"></select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="hint">F ecrã inteiro · H esconder HUD · T tap tempo · espaço pulso · 1–9 looks</p>
+      </footer>
+    </div>
+    <div id="toast" hidden></div>
+    <script type="module" src="/js/stage.js"></script>
+  </body>
+</html>

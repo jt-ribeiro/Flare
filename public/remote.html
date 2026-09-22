@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="pt">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>FLARE · câmara</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23070708'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%237dffd4'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/css/remote.css" />
+  </head>
+  <body>
+    <div id="camGate" class="gate">
+      <p class="kicker">FLARE</p>
+      <h1>Liga a câmara</h1>
+      <p id="gateLead">Este telemóvel filma a sala e envia o vídeo para o projetor.</p>
+      <button type="button" id="btnGrantCam" class="xl">Ligar câmara</button>
+      <div id="gateError" class="error" hidden></div>
+    </div>
+
+    <div id="app" hidden>
+      <header>
+        <div class="brand">
+          <span class="dot on" id="dot"></span>
+          <strong>FLARE</strong>
+          <span class="vibe-badge" id="vibeBadge">☣️ FREE TEKNO</span>
+        </div>
+        <div class="header-actions">
+          <button type="button" id="btnAuto" class="btn-auto-rave" title="Modo Showtime Autónomo">⚡ AUTO</button>
+          <span id="status">a ligar…</span>
+        </div>
+      </header>
+
+      <video id="preview" autoplay muted playsinline></video>
+
+      <div class="mod-block cam-block">
+        <div class="cam-badges">
+          <span class="cam-badge" id="badgeCamA">A: PC <i class="indicator"></i></span>
+          <span class="cam-badge" id="badgeCamB">B: TEL <i class="indicator"></i></span>
+        </div>
+        <span>📹 Mistura de Câmaras (A/B)</span>
+        <div class="chips-scroll" id="camModeChips">
+          <button type="button" class="chip active" data-cam="auto">AUTO</button>
+          <button type="button" class="chip" data-cam="a">PC (A)</button>
+          <button type="button" class="chip" data-cam="b">TEL (B)</button>
+          <button type="button" class="chip" data-cam="crossfade">FADER</button>
+          <button type="button" class="chip" data-cam="pip_a">PIP DJ</button>
+          <button type="button" class="chip" data-cam="pip_b">PIP PISTA</button>
+          <button type="button" class="chip" data-cam="split">SPLIT</button>
+        </div>
+        <div class="cam-fader-wrap">
+          <span class="fader-tag">A (PC)</span>
+          <input id="camFader" type="range" min="0" max="100" value="50" />
+          <span class="fader-tag">B (TEL)</span>
+        </div>
+      </div>
+
+      <div class="row tight-wrap">
+        <label class="intensity-wrap flex-1">
+          <span>Intensidade</span>
+          <input id="intensity" type="range" min="0" max="100" value="72" />
+        </label>
+        <label class="intensity-wrap flex-1">
+          <span>Cor / Tint</span>
+          <input id="hueShift" type="range" min="0" max="100" value="0" />
+        </label>
+        <label class="intensity-wrap flex-1">
+          <span>Silhueta (GPU)</span>
+          <input id="motionMaskSlider" type="range" min="0" max="100" value="0" />
+        </label>
+      </div>
+
+      <div class="mod-block">
+        <span>Vibe / Modo de Rodízio</span>
+        <select id="randomModeSelect" class="w-full"></select>
+        <div class="row tight">
+          <button type="button" id="btnRotate">Rodízio</button>
+          <select id="rotateMins">
+            <option value="20">20 s</option>
+            <option value="30" selected>30 s</option>
+            <option value="45">45 s</option>
+            <option value="60">1 min</option>
+            <option value="120">2 min</option>
+            <option value="300">5 min</option>
+          </select>
+        </div>
+        <p class="fine" id="rotateEta"></p>
+      </div>
+
+      <div class="mod-block">
+        <span>Baixo do microfone</span>
+        <input id="bassAmount" type="range" min="0" max="100" value="70" />
+        <div class="chips" id="bassChips">
+          <button type="button" class="chip active" data-bass="bassFlash">Flash</button>
+          <button type="button" class="chip active" data-bass="bassShake">Vibração</button>
+          <button type="button" class="chip" data-bass="bassZoom">Zoom</button>
+          <button type="button" class="chip" data-bass="bassRgb">RGB</button>
+        </div>
+      </div>
+
+      <div class="cat-bar" id="catBar"></div>
+      <div id="looks" class="looks"></div>
+
+      <div class="row">
+        <button type="button" id="btnPulse" class="xl">Pulso</button>
+        <button type="button" id="btnTap" class="xl tap-btn">TAP <b id="bpmVal">124</b><small>BPM</small></button>
+      </div>
+      <div class="row">
+        <button type="button" id="btnFlip">Trocar câmara</button>
+        <button type="button" id="btnStopCam">Parar câmara</button>
+      </div>
+    </div>
+    <script type="module" src="/js/remote.js"></script>
+  </body>
+</html>

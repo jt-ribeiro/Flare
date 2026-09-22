@@ -1,0 +1,16 @@
+{
+  "name": "flare",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Live restyle for events — camera to projector, phone as remote. Local and free.",
+  "scripts": {
+    "start": "node server.mjs",
+    "start:no-open": "node server.mjs --no-open"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "selfsigned": "^2.4.1",
+    "ws": "^8.18.3"
+  }
+}
