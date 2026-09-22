@@ -9,8 +9,10 @@ export const CATEGORIES = [
 ];
 
 export const LOOKS = [
-  // 🌌 3D LIDAR (AFTERLIFE)
+  // 🌌 3D LIDAR & WIREFRAME (AFTERLIFE / ANYMA)
   { id: "lidarAfterlife", name: "Afterlife 3D", hint: "Holograma Tale of Us", category: "lidar" },
+  { id: "lidarWireframe", name: "3D Cyber Mesh", hint: "Malha Wireframe 3D", category: "lidar" },
+  { id: "lidarVoxel", name: "3D Holo Grid", hint: "Grelha Laser 3D", category: "lidar" },
   { id: "lidarMatrix", name: "Matrix LiDAR", hint: "Laser verde volumétrico", category: "lidar" },
   { id: "lidarGhost", name: "Spectral Embers", hint: "Partículas anti-gravidade", category: "lidar" },
   { id: "lidarAcidTekno", name: "Acid Particle", hint: "Dispersão cromática 3D", category: "lidar" },
@@ -257,6 +259,7 @@ precision highp float;
 uniform sampler2D uVideo;
 uniform sampler2D uPrev;
 uniform sampler2D uPrevVideo;
+uniform sampler2D uAiMask;
 uniform float uMotionMask;
 uniform vec2 uRes;
 uniform float uTime;
@@ -376,11 +379,12 @@ vec3 finish(vec3 col) {
     vec3 prevVid = texture(uPrevVideo, clamp(vUv, 0.0, 1.0)).rgb;
     float delta = length(currentVid - prevVid);
     float motion = smoothstep(0.03, 0.18, delta);
-    float scanline = sin(vUv.y * uRes.y * 1.5) * 0.12;
-    vec3 bgDark = vec3(0.03, 0.04, 0.05) + scanline * 0.02;
-    vec3 bgCol = mix(col * 0.18, bgDark, 0.70);
-    vec3 fgCol = col * 1.45 + vec3(0.12, 0.28, 0.08) * motion;
-    vec3 maskedCol = mix(bgCol, fgCol, motion);
+    float aiPerson = texture(uAiMask, vec2(1.0 - vUv.x, 1.0 - vUv.y)).r;
+    float bodyMask = clamp(max(aiPerson, motion * 0.8), 0.0, 1.0);
+    float rim = smoothstep(0.18, 0.45, bodyMask) * (1.0 - smoothstep(0.55, 0.88, bodyMask));
+    vec3 bgDark = vec3(0.01, 0.012, 0.018);
+    vec3 fgCol = col * 1.45 + vec3(0.0, 0.92, 0.88) * rim * (0.65 + k * 0.6);
+    vec3 maskedCol = mix(bgDark, fgCol, smoothstep(0.15, 0.55, bodyMask));
     col = mix(col, maskedCol, uMotionMask);
   }
   return clamp(col, 0.0, 1.0);

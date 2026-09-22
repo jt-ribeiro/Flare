@@ -28,6 +28,7 @@ const badgeCamB = document.querySelector("#badgeCamB");
 const camModeChips = document.querySelector("#camModeChips");
 const camFader = document.querySelector("#camFader");
 const motionMaskSlider = document.querySelector("#motionMaskSlider");
+const btnMotionMaskToggle = document.querySelector("#btnMotionMaskToggle");
 const btnAuto = document.querySelector("#btnAuto");
 const dimBar = document.querySelector("#dimBar");
 const sessionSlotsBox = document.querySelector("#sessionSlotsBox");
@@ -123,7 +124,12 @@ function setCamMix(val, broadcast = true) {
 
 function setMotionMask(val, broadcast = true) {
   motionMask = Math.min(1, Math.max(0, val));
+  const isOn = motionMask > 0.05;
   if (motionMaskSlider) motionMaskSlider.value = String(Math.round(motionMask * 100));
+  if (btnMotionMaskToggle) {
+    btnMotionMaskToggle.classList.toggle("active", isOn);
+    btnMotionMaskToggle.textContent = isOn ? "👤 IA CORPO: ON" : "👤 IA CORPO";
+  }
   if (broadcast) net.send({ type: "setMotionMask", value: motionMask });
 }
 
@@ -210,6 +216,7 @@ function setDimension(dim, broadcast = true) {
 function fillCategories() {
   if (!catBar) return;
   catBar.innerHTML = "";
+  catBar.hidden = dimension === "3d";
 
   const available = CATEGORIES.filter((cat) => {
     if (cat.id === "all") return true;
@@ -277,9 +284,9 @@ function syncModUi() {
     const on = { bassFlash, bassShake, bassZoom, bassRgb }[btn.dataset.bass];
     btn.classList.toggle("active", Boolean(on));
   }
-  btnRotate.classList.toggle("active", rotateOn);
-  rotateMinsEl.value = String(rotateSec);
-  rotateEtaEl.textContent = rotateOn ? `A trocar de ${rotateSec} em ${rotateSec} segundos` : "";
+  btnRotate?.classList.toggle("active", rotateOn);
+  if (rotateMinsEl) rotateMinsEl.value = String(rotateSec);
+  if (rotateEtaEl) rotateEtaEl.textContent = rotateOn ? `A trocar de ${rotateSec} em ${rotateSec} segundos` : "";
   if (hueShiftEl) hueShiftEl.value = String(Math.round(hueShift * 100));
   if (randomModeSelect) randomModeSelect.value = randomMode;
   if (vibeBadge) vibeBadge.textContent = randomModeById(randomMode).badge;
@@ -291,6 +298,11 @@ function syncModUi() {
   }
   if (camFader) camFader.value = String(Math.round(camMix * 100));
   if (motionMaskSlider) motionMaskSlider.value = String(Math.round(motionMask * 100));
+  if (btnMotionMaskToggle) {
+    const isOn = motionMask > 0.05;
+    btnMotionMaskToggle.classList.toggle("active", isOn);
+    btnMotionMaskToggle.textContent = isOn ? "👤 IA CORPO: ON" : "👤 IA CORPO";
+  }
   if (dimBar) {
     for (const chip of dimBar.querySelectorAll(".dim-chip")) {
       chip.classList.toggle("active", chip.dataset.dim === dimension);
@@ -299,7 +311,7 @@ function syncModUi() {
 }
 
 function applyMods(msg, broadcast) {
-  if (Number.isFinite(msg.bassReact)) {
+  if (Number.isFinite(msg.bassReact) && bassAmountEl) {
     bassAmountEl.value = String(Math.round(msg.bassReact * 100));
   }
   if (typeof msg.bassFlash === "boolean") bassFlash = msg.bassFlash;
@@ -326,7 +338,7 @@ function applyMods(msg, broadcast) {
   if (broadcast) {
     net.send({
       type: "setMods",
-      bassReact: Number(bassAmountEl.value) / 100,
+      bassReact: bassAmountEl ? Number(bassAmountEl.value) / 100 : 0.75,
       bassFlash,
       bassShake,
       bassZoom,
@@ -349,7 +361,7 @@ fillRandomModes();
 fillLooks();
 setDimension(dimension, false);
 
-intensityEl.addEventListener("input", () => {
+intensityEl?.addEventListener("input", () => {
   if (!applying) net.send({ type: "setIntensity", value: Number(intensityEl.value) / 100 });
 });
 
@@ -364,6 +376,11 @@ motionMaskSlider?.addEventListener("input", () => {
   if (!applying) setMotionMask(Number(motionMaskSlider.value) / 100, true);
 });
 
+btnMotionMaskToggle?.addEventListener("click", () => {
+  if (navigator.vibrate) navigator.vibrate(20);
+  setMotionMask(motionMask > 0.05 ? 0.0 : 0.9, true);
+});
+
 camFader?.addEventListener("input", () => {
   if (!applying) setCamMix(Number(camFader.value) / 100, true);
 });
@@ -374,7 +391,7 @@ if (camModeChips) {
   }
 }
 
-bassAmountEl.addEventListener("input", () => {
+bassAmountEl?.addEventListener("input", () => {
   if (!applying) applyMods({ bassReact: Number(bassAmountEl.value) / 100 }, true);
 });
 
@@ -385,10 +402,10 @@ for (const btn of document.querySelectorAll("#bassChips .chip")) {
   });
 }
 
-btnRotate.addEventListener("click", () => applyMods({ rotate: !rotateOn }, true));
-rotateMinsEl.addEventListener("change", () => applyMods({ rotateSec: Number(rotateMinsEl.value) }, true));
+btnRotate?.addEventListener("click", () => applyMods({ rotate: !rotateOn }, true));
+rotateMinsEl?.addEventListener("change", () => applyMods({ rotateSec: Number(rotateMinsEl.value) }, true));
 
-document.querySelector("#btnPulse").addEventListener("click", () => {
+document.querySelector("#btnPulse")?.addEventListener("click", () => {
   if (navigator.vibrate) navigator.vibrate(30);
   net.send({ type: "pulse" });
 });

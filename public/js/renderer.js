@@ -43,7 +43,7 @@ function programCustom(gl, vertSrc, fragSrc) {
   return p;
 }
 
-function makeParticleGridBuffer(gl, cols = 400, rows = 225) {
+function makeParticleGridBuffer(gl, cols = 320, rows = 180) {
   const count = cols * rows;
   const data = new Float32Array(count * 2);
   let idx = 0;
@@ -58,7 +58,25 @@ function makeParticleGridBuffer(gl, cols = 400, rows = 225) {
   const buf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
-  return { buf, count };
+
+  // Build 3D Wireframe Mesh index buffer (gl.LINES connecting horizontal and vertical neighbors)
+  // Step by 2 so wireframe mesh has clean geometric triangles/quads at 60 FPS
+  const step = 2;
+  const indices = [];
+  for (let y = 0; y < rows - step; y += step) {
+    for (let x = 0; x < cols - step; x += step) {
+      const i0 = y * cols + x;
+      const iRight = y * cols + (x + step);
+      const iDown = (y + step) * cols + x;
+      indices.push(i0, iRight, i0, iDown);
+    }
+  }
+  const lineIndices = new Uint32Array(indices);
+  const indexBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuf);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, lineIndices, gl.STATIC_DRAW);
+
+  return { buf, count, indexBuf, lineCount: lineIndices.length };
 }
 
 const LIDAR_VERT = `#version 300 es
@@ -68,6 +86,7 @@ in vec2 aGridUv;
 
 uniform sampler2D uVideo;
 uniform sampler2D uPrevVideo;
+uniform sampler2D uAiMask;
 uniform vec2 uRes;
 uniform float uTime;
 uniform float uBass;
@@ -75,6 +94,7 @@ uniform float uIntensity;
 uniform float uMotionMask;
 uniform float uHueShift;
 uniform int uStyle;
+uniform int uIsLinePass;
 
 out vec4 vColor;
 out float vDepth;
@@ -109,12 +129,20 @@ void main() {
   float motion = length(cam.rgb - prev.rgb);
   vMotion = motion;
 
+  // Sample AI Human Body Segmentation mask
+  float aiPerson = texture(uAiMask, vec2(1.0 - uv.x, 1.0 - uv.y)).r;
+  float bodyMask = clamp(max(aiPerson, motion * 1.6), 0.0, 1.0);
+  float subjectGate = mix(1.0, smoothstep(0.18, 0.52, bodyMask), uMotionMask);
+
   float aspect = uRes.x / max(uRes.y, 1.0);
   vec3 pos = vec3((uv.x - 0.5) * 2.8 * (aspect / 1.777), (uv.y - 0.5) * 1.6, 0.0);
 
   // Depth displacement (Z axis)
   float zDisp = (luma * 1.8 - 0.4) * uIntensity;
-  zDisp += motion * 3.2 * max(0.35, uMotionMask);
+  zDisp += motion * 2.8 * max(0.35, uMotionMask);
+  if (uMotionMask > 0.05) {
+    zDisp *= (0.25 + 0.95 * subjectGate);
+  }
 
   if (uStyle == 0) {
     // Afterlife: undulating wave extrusion with bass impact
@@ -135,6 +163,14 @@ void main() {
     float r = length(centerDist);
     pos.xy += (centerDist / max(r, 0.001)) * sin(r * 24.0 - uTime * 8.0) * (uBass * 0.18);
     zDisp += sin(r * 32.0 - uTime * 10.0) * (uBass * 0.6);
+  } else if (uStyle == 4) {
+    // 3D Cyber Mesh (Anyma / Tron Wireframe Terrain)
+    float wave = sin(uv.x * 16.0 + uTime * 2.4) * cos(uv.y * 14.0 - uTime * 1.8);
+    zDisp = (luma * 2.1 - 0.35) * uIntensity + wave * (0.12 + uBass * 0.38) + motion * 2.4;
+  } else if (uStyle == 5) {
+    // 3D Holo Voxel Grid (Quantized architectural steps)
+    float rawZ = (luma * 2.0 - 0.3) * uIntensity + motion * 2.2;
+    zDisp = floor(rawZ * 8.0) / 8.0 + sin(uTime * 4.0 + uv.y * 20.0) * (uBass * 0.22);
   }
 
   pos.z = zDisp;
@@ -162,11 +198,13 @@ void main() {
   if (uStyle == 1) baseSize = 3.6;
   if (uStyle == 2) baseSize = 5.2;
   if (uStyle == 3) baseSize = 4.6;
+  if (uStyle == 4) baseSize = 2.8;
+  if (uStyle == 5) baseSize = 3.8;
 
   float pSize = (baseSize / max(zProj, 0.3)) * (1.0 + uBass * 0.65) * (0.6 + luma * 0.85);
   gl_PointSize = clamp(pSize, 1.0, 26.0);
 
-  // Particle Color Styling
+  // Particle / Wireframe Color Styling
   vec3 col = cam.rgb;
   if (uStyle == 0) {
     // Afterlife: Holographic Cyan (#00f0ff) & Burnished Gold (#ffd700)
@@ -195,9 +233,24 @@ void main() {
     vec3 particleCol = mix(acid, pink, fract(uv.x * 2.0 + uTime * 0.5 + luma));
     particleCol += vec3(motion * 1.6);
     col = particleCol;
+  } else if (uStyle == 4) {
+    // 3D Cyber Mesh: Electric Cyan, Magenta & White Core
+    vec3 electricCyan = vec3(0.0, 0.96, 1.0);
+    vec3 neonMagenta = vec3(1.0, 0.12, 0.68);
+    col = mix(electricCyan, neonMagenta, clamp(zDisp * 0.65 + uBass * 0.4, 0.0, 1.0));
+    col += vec3(0.85, 0.95, 1.0) * clamp(motion * 2.2, 0.0, 0.9);
+  } else if (uStyle == 5) {
+    // 3D Holo Grid: Architectural Ice Blue & Emerald Laser
+    vec3 iceBlue = vec3(0.2, 0.75, 1.0);
+    vec3 emerald = vec3(0.0, 1.0, 0.65);
+    float contour = abs(fract(zDisp * 6.0) - 0.5) * 2.0;
+    col = mix(iceBlue, emerald, contour) * (0.8 + luma * 0.8);
   }
 
-  float alpha = smoothstep(0.03, 0.16, luma + motion * 0.55);
+  float alpha = smoothstep(0.03, 0.16, luma + motion * 0.55) * subjectGate;
+  if (uIsLinePass == 1) {
+    alpha *= 0.62;
+  }
   vColor = vec4(col, alpha);
 }
 `;
@@ -211,6 +264,7 @@ in float vMotion;
 
 uniform float uIntensity;
 uniform float uHueShift;
+uniform int uIsLinePass;
 
 out vec4 fragColor;
 
@@ -230,14 +284,19 @@ vec3 hsv2rgb(vec3 c) {
 }
 
 void main() {
-  vec2 coord = gl_PointCoord - vec2(0.5);
-  float distSq = dot(coord, coord);
-  if (distSq > 0.25) discard;
+  if (vColor.a < 0.02) discard;
 
-  float radial = exp(-distSq * 10.0);
-  float core = smoothstep(0.08, 0.0, distSq) * 0.7;
+  float glow = 1.0;
+  if (uIsLinePass == 0) {
+    vec2 coord = gl_PointCoord - vec2(0.5);
+    float distSq = dot(coord, coord);
+    if (distSq > 0.25) discard;
 
-  float glow = radial + core;
+    float radial = exp(-distSq * 10.0);
+    float core = smoothstep(0.08, 0.0, distSq) * 0.7;
+    glow = radial + core;
+  }
+
   vec3 col = vColor.rgb * glow * 1.5;
 
   if (abs(uHueShift) > 0.001) {
@@ -253,6 +312,7 @@ void main() {
 const LIDAR_UNIFORMS = [
   "uVideo",
   "uPrevVideo",
+  "uAiMask",
   "uRes",
   "uTime",
   "uBass",
@@ -260,16 +320,27 @@ const LIDAR_UNIFORMS = [
   "uMotionMask",
   "uHueShift",
   "uStyle",
+  "uIsLinePass",
 ];
 
-function makeTexture(gl) {
+function makeTexture(gl, initByte = 0) {
   const tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RGBA,
+    1,
+    1,
+    0,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    new Uint8Array([initByte, initByte, initByte, 255])
+  );
   return tex;
 }
 
@@ -301,6 +372,7 @@ const LOOK_UNIFORMS = [
   "uVideo",
   "uPrev",
   "uPrevVideo",
+  "uAiMask",
   "uMotionMask",
 ];
 
@@ -343,6 +415,7 @@ export class Renderer {
     this.videoTexB = makeTexture(gl);
     this.videoTex = this.videoTexA;
     this.prevVideoTex = makeTexture(gl);
+    this.aiMaskTex = makeTexture(gl, 255);
 
     this.videoWA = 0;
     this.videoHA = 0;
@@ -379,6 +452,10 @@ export class Renderer {
     this.buf = buf;
 
     for (const look of LOOKS) {
+      if (this.isLidarLook(look.id) || !SHADES[look.id]) {
+        this.programs[look.id] = true;
+        continue;
+      }
       const frag = `${COMMON_GLSL}\n${SHADES[look.id]}\nvoid main(){ fragColor = vec4(finish(shade(warpedUv(vUv))), 1.0); }`;
       const p = program(gl, frag);
       this.programs[look.id] = p;
@@ -400,7 +477,7 @@ export class Renderer {
       this.transitionUniforms[u] = gl.getUniformLocation(this.transitionProg, u);
     }
 
-    this.particleGrid = makeParticleGridBuffer(gl, 400, 225);
+    this.particleGrid = makeParticleGridBuffer(gl, 320, 180);
     this.lidarProg = programCustom(gl, LIDAR_VERT, LIDAR_FRAG);
     this.lidarUniforms = {};
     for (const u of LIDAR_UNIFORMS) {
@@ -408,6 +485,16 @@ export class Renderer {
     }
 
     this.transition = null;
+  }
+
+  uploadAiMask(maskCanvas) {
+    if (!maskCanvas) return;
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, this.aiMaskTex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    try {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, maskCanvas);
+    } catch {}
   }
 
   setLook(id, withTransition = true, duration = 10000) {
@@ -539,6 +626,8 @@ export class Renderer {
     if (id === "lidarMatrix") return 1;
     if (id === "lidarGhost") return 2;
     if (id === "lidarAcidTekno") return 3;
+    if (id === "lidarWireframe") return 4;
+    if (id === "lidarVoxel") return 5;
     return 0; // lidarAfterlife
   }
 
@@ -562,6 +651,7 @@ export class Renderer {
     gl.enableVertexAttribArray(loc);
     gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
 
+    const styleCode = this.getLidarStyleCode(lookId);
     const u = this.lidarUniforms;
     gl.uniform2f(u.uRes, w, h);
     gl.uniform1f(u.uTime, this.params.time);
@@ -569,7 +659,7 @@ export class Renderer {
     gl.uniform1f(u.uBass, this.params.bass);
     gl.uniform1f(u.uMotionMask, this.params.motionMask ?? 0);
     gl.uniform1f(u.uHueShift, this.params.hueShift ?? 0);
-    gl.uniform1i(u.uStyle, this.getLidarStyleCode(lookId));
+    gl.uniform1i(u.uStyle, styleCode);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.camMixTarget.tex);
@@ -579,6 +669,19 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, this.prevVideoTex);
     gl.uniform1i(u.uPrevVideo, 1);
 
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.aiMaskTex);
+    gl.uniform1i(u.uAiMask, 2);
+
+    // For 3D Wireframe Mesh (4) and 3D Holo Grid (5), draw interconnected 3D gl.LINES first
+    if (styleCode === 4 || styleCode === 5) {
+      gl.uniform1i(u.uIsLinePass, 1);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.particleGrid.indexBuf);
+      gl.drawElements(gl.LINES, this.particleGrid.lineCount, gl.UNSIGNED_INT, 0);
+    }
+
+    // Draw glowing vertices/particles
+    gl.uniform1i(u.uIsLinePass, 0);
     gl.drawArrays(gl.POINTS, 0, this.particleGrid.count);
 
     gl.disable(gl.BLEND);
@@ -629,6 +732,10 @@ export class Renderer {
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.prevVideoTex);
     gl.uniform1i(u.uPrevVideo, 2);
+
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, this.aiMaskTex);
+    gl.uniform1i(u.uAiMask, 3);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }

@@ -952,6 +952,49 @@ body:not(.waiting-cam) .gate {
   border-radius: 4px;
 }
 
+/* Simplified Single-View Dock */
+.dock-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.quick-sliders {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+.quick-sliders .slider-inline {
+  min-width: 150px;
+  max-width: 220px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.quick-cams {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+#btnMotionMaskToggle.active {
+  background: rgba(0, 240, 255, 0.22);
+  border-color: var(--cyan);
+  color: #fff;
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.45);
+}
+
 @media (max-width: 1024px) {
   .cam-control-grid {
     grid-template-columns: 1fr 1fr;
@@ -969,14 +1012,8 @@ body:not(.waiting-cam) .gate {
   .actions {
     gap: 6px;
   }
-  .actions button:not(.btn-auto-rave):not(#btnToggleDock):not(#btnFull) {
+  .actions button:not(.btn-auto-rave):not(#btnMotionMaskToggle):not(#btnToggleDock):not(#btnFull) {
     display: none;
-  }
-  .cam-control-grid {
-    grid-template-columns: 1fr;
-  }
-  .mods-grid {
-    grid-template-columns: 1fr;
   }
   .top {
     padding: 8px 12px;
@@ -987,15 +1024,12 @@ body:not(.waiting-cam) .gate {
   .dock {
     padding: 8px 10px 12px;
   }
-  .dock-tabs {
-    gap: 4px;
-    margin-bottom: 8px;
+  .quick-sliders {
+    width: 100%;
   }
-  .dock-tab {
-    padding: 5px 8px;
-    font-size: 10px;
-  }
-  .hint {
-    display: none;
+  .quick-sliders .slider-inline {
+    min-width: 100px;
+    flex: 1;
   }
 }
+

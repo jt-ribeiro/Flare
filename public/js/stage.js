@@ -3,6 +3,7 @@ import { bindVideo, cameraContext, cameraErrorText, openCamera } from "./camera.
 import { CATEGORIES, LOOKS, RANDOM_MODES, lookById, randomModeById, filterLooks, is3DLook } from "./looks.js";
 import { connect } from "./net.js";
 import { Renderer } from "./renderer.js";
+import { BodySegmenter } from "./segmenter.js";
 import { DEFAULTS } from "./settings.js";
 
 const canvas = document.querySelector("#stage");
@@ -46,6 +47,7 @@ const phoneListChips = document.querySelector("#phoneListChips");
 const dimBar = document.querySelector("#dimBar");
 
 const renderer = new Renderer(canvas);
+const bodySegmenter = new BodySegmenter();
 const audio = new AudioPulse();
 const net = connect();
 
@@ -262,10 +264,13 @@ function setCamMix(val, broadcast = true) {
 
 function setMotionMask(val, broadcast = true) {
   motionMask = Math.min(1, Math.max(0, val));
+  const isOn = motionMask > 0.05;
+  bodySegmenter.setEnabled(isOn);
   renderer.setParams({ motionMask });
   if (motionMaskSlider) motionMaskSlider.value = String(Math.round(motionMask * 100));
   if (btnMotionMaskToggle) {
-    btnMotionMaskToggle.classList.toggle("active", motionMask > 0.05);
+    btnMotionMaskToggle.classList.toggle("active", isOn);
+    btnMotionMaskToggle.textContent = isOn ? "👤 IA CORPO: ON" : "👤 IA CORPO";
   }
   if (broadcast) net.send({ type: "setMotionMask", value: motionMask });
 }
@@ -390,7 +395,7 @@ function setSource(next, broadcast = true) {
   source = next;
   const live = next === "camera" || next === "phone" || next === "dual";
   setLive(live);
-  document.querySelector("#btnCam").classList.toggle("active", next === "camera" || next === "dual");
+  document.querySelector("#btnCam")?.classList.toggle("active", next === "camera" || next === "dual");
   if (live) {
     ensureMic();
     if (rotateOn) armRotate();
@@ -523,6 +528,7 @@ function tickRotate(now) {
 function fillCategories() {
   if (!catBar) return;
   catBar.innerHTML = "";
+  catBar.hidden = dimension === "3d";
 
   const available = CATEGORIES.filter((cat) => {
     if (cat.id === "all") return true;
@@ -822,7 +828,7 @@ function setProjector(on) {
   hudLocked = on;
   document.body.classList.toggle("projector", on);
   hud.classList.toggle("hidden", on);
-  document.querySelector("#btnHud").classList.toggle("active", on);
+  document.querySelector("#btnHud")?.classList.toggle("active", on);
 }
 
 function showHudBriefly() {
@@ -1184,6 +1190,13 @@ function frame(now) {
 
   const readyA = Boolean(camStreamA && activeCamVideo && (activeCamVideo.readyState >= 2 || activeCamVideo.videoWidth > 0));
   const readyB = Boolean(phoneVideo && (phoneVideo.readyState >= 2 || phoneVideo.videoWidth > 0));
+
+  if (motionMask > 0.05) {
+    const segSource = readyB && camMode !== "a" ? phoneVideo : activeCamVideo;
+    const maskCanvas = bodySegmenter.update(segSource, now);
+    if (maskCanvas) renderer.uploadAiMask(maskCanvas);
+  }
+
   renderer.draw(readyA ? activeCamVideo : (camStreamA ? activeCamVideo : null), readyB ? phoneVideo : null);
   requestAnimationFrame(frame);
 }

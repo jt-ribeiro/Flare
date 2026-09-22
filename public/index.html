@@ -13,12 +13,11 @@
       <div class="gate-card">
         <p class="kicker">FLARE</p>
         <h1>Liga a câmara</h1>
-        <p id="gateLead">O restyle precisa do vídeo da sala. Sem câmara não há palco.</p>
+        <p id="gateLead">Liga a câmara do PC ou lê o código QR com até 4 telemóveis.</p>
         <button type="button" id="btnGrantCam" class="gate-btn">Permitir câmara deste PC</button>
-        <p class="or">Se este PC não tiver câmara, filma com o telemóvel — mesmo Wi-Fi</p>
+        <p class="or">Ou entra com o telemóvel na mesma rede Wi-Fi:</p>
         <img id="gateQr" alt="QR da câmara do telemóvel" />
         <a id="gateRemoteLink" href="/remote?cam=1"></a>
-        <p id="gateCert" class="fine">No telemóvel o QR é HTTPS. Aviso de certificado: Avançado → continuar. É local, não é um site público. Depois toca Ligar câmara.</p>
         <div id="gateError" class="error" hidden></div>
       </div>
     </div>
@@ -29,18 +28,17 @@
         <div class="brand">
           <span class="dot" id="liveDot"></span>
           <strong>FLARE</strong>
-          <span class="look-name" id="lookName">Tekno Strobe</span>
-          <div class="bass-meter" title="Baixo"><i id="bassMeter"></i></div>
+          <span class="look-name" id="lookName">Afterlife 3D</span>
+          <div class="bass-meter" title="Graves"><i id="bassMeter"></i></div>
           <div class="cam-badges" id="camBadges">
-            <span class="cam-badge" id="badgeCamA" title="Câmara A (PC)">A: PC <i class="indicator"></i></span>
+            <span class="cam-badge" id="badgeCamA" title="Câmara A (PC)">💻 PC <i class="indicator"></i></span>
           </div>
         </div>
         <div class="actions">
           <button type="button" id="btnAuto" class="btn-auto-rave" title="Modo Showtime Autónomo Fullscreen">⚡ AUTO</button>
-          <button type="button" id="btnToggleDock" class="ghost" title="Mostrar/Ocultar Controlos">🎛️ Painel</button>
-          <button type="button" id="btnCam" class="ghost" title="Ligar câmara do PC">Câmara</button>
-          <button type="button" id="btnMic" class="ghost" title="Ligar áudio da sala">Som</button>
-          <button type="button" id="btnRec" class="ghost" title="Gravar vídeo">Gravar</button>
+          <button type="button" id="btnMotionMaskToggle" class="ghost" title="Recortar Pessoas por IA (Fundo Preto)">👤 IA CORPO</button>
+          <button type="button" id="btnMic" class="ghost" title="Ligar som do microfone">🔊 Som</button>
+          <button type="button" id="btnToggleDock" class="ghost active" title="Mostrar/Ocultar Painel">🎛️ Painel</button>
           <button type="button" id="btnFull" class="primary" title="Ecrã inteiro">⛶</button>
         </div>
       </header>
@@ -48,100 +46,54 @@
       <aside class="qr-panel" id="qrPanel">
         <video id="rawPreview" autoplay muted playsinline></video>
         <img id="qr" alt="QR do remoto" />
-        <p>Câmara / comando no telemóvel</p>
+        <p>Até 4 Telemóveis (QR)</p>
         <a id="remoteLink" href="/remote?cam=1" target="_blank" rel="noreferrer"></a>
       </aside>
 
+      <!-- PAINEL UNIFICADO E SIMPLIFICADO -->
       <footer class="dock" id="dock">
-        <div class="dock-tabs">
-          <button type="button" class="dock-tab active" data-tab="tabVisuals">🎨 VISUAIS</button>
-          <button type="button" class="dock-tab" data-tab="tabCameras">📹 CÂMARAS</button>
-          <button type="button" class="dock-tab" data-tab="tabMods">⚡ MODS & FX</button>
-        </div>
-
-        <!-- TAB 1: VISUAIS -->
-        <div class="dock-pane active" id="tabVisuals">
-          <div class="pane-row">
-            <div class="dimension-bar" id="dimBar">
-              <span class="dim-label">EFEITOS:</span>
-              <button type="button" class="dim-chip active" data-dim="all" title="Ver e rodar todos os efeitos (2D e 3D)">🌐 2D + 3D</button>
-              <button type="button" class="dim-chip" data-dim="3d" title="Ver e rodar apenas hologramas 3D LiDAR">🌌 SÓ 3D</button>
-              <button type="button" class="dim-chip" data-dim="2d" title="Ver e rodar apenas efeitos 2D">📺 SÓ 2D</button>
-            </div>
-            <div class="cat-bar" id="catBar"></div>
-            <div class="slider-inline">
-              <span>Intensidade</span>
-              <input id="intensity" type="range" min="0" max="100" value="72" />
-            </div>
+        <div class="dock-top-bar">
+          <!-- 1. Escolher 2D / 3D -->
+          <div class="dimension-bar" id="dimBar">
+            <button type="button" class="dim-chip active" data-dim="all">🌐 2D + 3D</button>
+            <button type="button" class="dim-chip" data-dim="3d">🌌 SÓ 3D</button>
+            <button type="button" class="dim-chip" data-dim="2d">📺 SÓ 2D</button>
           </div>
-          <div id="looks" class="looks"></div>
-        </div>
 
-        <!-- TAB 2: CÂMARAS (Multi-Phone + Mix) -->
-        <div class="dock-pane" id="tabCameras">
-          <div class="cam-control-grid">
-            <div class="cam-subpanel">
-              <span class="subpanel-title">📱 CÂMARAS MÓVEIS (TELEFONES)</span>
-              <div class="chips" id="phoneListChips">
-                <span class="no-phones-hint">Lê o QR com o telemóvel para ligar câmaras em direto</span>
-              </div>
-            </div>
-            <div class="cam-subpanel">
-              <span class="subpanel-title">🎛️ MODOS DE REALIZAÇÃO</span>
-              <div class="chips" id="camModeChips">
-                <button type="button" class="chip active" data-cam="auto">AUTO</button>
-                <button type="button" class="chip" data-cam="a">PC (A)</button>
-                <button type="button" class="chip" data-cam="b">TEL (B)</button>
-                <button type="button" class="chip" data-cam="crossfade">FADER A/B</button>
-                <button type="button" class="chip" data-cam="pip_a">PIP DJ</button>
-                <button type="button" class="chip" data-cam="pip_b">PIP PISTA</button>
-                <button type="button" class="chip" data-cam="split">SPLIT 50/50</button>
-                <select id="cameraSelect" class="chip" hidden title="Selecionar webcam do PC"></select>
-              </div>
-            </div>
-            <div class="cam-fader-bar">
-              <span class="fader-tag">A (PC)</span>
-              <input id="camFader" type="range" min="0" max="100" value="50" title="Crossfader A/B" />
-              <span class="fader-tag">B (TEL)</span>
-              <span class="fader-val" id="camFaderVal">50/50</span>
-            </div>
-          </div>
-        </div>
+          <!-- 2. Categorias (esconde automaticamente quando SÓ 3D está ativo) -->
+          <div class="cat-bar" id="catBar"></div>
 
-        <!-- TAB 3: MODS & FX -->
-        <div class="dock-pane" id="tabMods">
-          <div class="mods-grid">
-            <div class="mod-card">
-              <span>👤 Silhueta Dançarinos (GPU)</span>
-              <div class="slider-row">
-                <input id="motionMaskSlider" type="range" min="0" max="100" value="0" />
-                <button type="button" id="btnMotionMaskToggle" class="chip">Dançarinos</button>
-              </div>
-            </div>
-            <div class="mod-card">
-              <span>🎨 Cor / Tint Global</span>
+          <!-- 3. Três Sliders Essenciais -->
+          <div class="quick-sliders">
+            <label class="slider-inline" title="Intensidade do Efeito">
+              <span>✨ Efeito</span>
+              <input id="intensity" type="range" min="0" max="100" value="75" />
+            </label>
+            <label class="slider-inline" title="Reação aos Graves da Música">
+              <span>🔊 Graves</span>
+              <input id="bassAmount" type="range" min="0" max="100" value="75" />
+            </label>
+            <label class="slider-inline" title="Mudar Cor / Tint Neon">
+              <span>🎨 Cor</span>
               <input id="hueShift" type="range" min="0" max="100" value="0" />
+            </label>
+          </div>
+
+          <!-- 4. Câmaras & Telemóveis na Sessão -->
+          <div class="quick-cams">
+            <div class="chips" id="camModeChips">
+              <button type="button" class="chip active" data-cam="auto">AUTO</button>
+              <button type="button" class="chip" data-cam="a">PC</button>
+              <button type="button" class="chip" data-cam="b">TEL</button>
+              <button type="button" class="chip" data-cam="split">SPLIT</button>
+              <select id="cameraSelect" class="chip" hidden title="Selecionar webcam do PC"></select>
             </div>
-            <div class="mod-card">
-              <span>🔊 Reação ao Baixo</span>
-              <input id="bassAmount" type="range" min="0" max="100" value="70" />
-              <div class="chips" id="bassChips">
-                <button type="button" class="chip active" data-bass="bassFlash">Flash</button>
-                <button type="button" class="chip active" data-bass="bassShake">Vibração</button>
-                <button type="button" class="chip" data-bass="bassZoom">Zoom</button>
-                <button type="button" class="chip" data-bass="bassRgb">RGB</button>
-              </div>
-            </div>
-            <div class="mod-card">
-              <span>⏱️ Ritmo / Vibe</span>
-              <div class="rhythm-row">
-                <button type="button" id="btnTap" class="chip tap-btn">TAP <b id="bpmVal">124</b> <small>BPM</small></button>
-                <select id="randomModeSelect" title="Vibe do Rodízio"></select>
-              </div>
-            </div>
+            <div class="chips" id="phoneListChips"></div>
           </div>
         </div>
-        <p class="hint">F ecrã inteiro · H esconder HUD · T tap tempo · espaço pulso · 1–9 looks</p>
+
+        <!-- Grelha de Efeitos Visuais -->
+        <div id="looks" class="looks"></div>
       </footer>
     </div>
     <div id="toast" hidden></div>
