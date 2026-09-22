@@ -201,7 +201,7 @@ void main() {
     return;
   }
   if (uHasA < 0.5 && uHasB < 0.5) {
-    fragColor = vec4(0.02, 0.03, 0.04, 1.0);
+    fragColor = texture(uTexA, vUv);
     return;
   }
 

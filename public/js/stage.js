@@ -55,13 +55,16 @@ videoA.muted = true;
 videoA.autoplay = true;
 videoA.setAttribute("playsinline", "");
 videoA.setAttribute("webkit-playsinline", "");
+videoA.setAttribute("muted", "");
+videoA.setAttribute("autoplay", "");
 videoA.style.position = "fixed";
-videoA.style.top = "-9999px";
-videoA.style.left = "-9999px";
-videoA.style.width = "1px";
-videoA.style.height = "1px";
-videoA.style.opacity = "0";
+videoA.style.bottom = "0";
+videoA.style.right = "0";
+videoA.style.width = "4px";
+videoA.style.height = "4px";
+videoA.style.opacity = "0.001";
 videoA.style.pointerEvents = "none";
+videoA.style.zIndex = "-1";
 document.body.appendChild(videoA);
 
 // Multi-phone remote cameras map: peerId -> { pc, videoEl, stream, label, iceQueue }
@@ -580,8 +583,19 @@ async function listCameras() {
   } catch {}
 }
 
+function getActiveCameraVideo() {
+  if (videoA && videoA.videoWidth > 0) return videoA;
+  if (rawPreview && rawPreview.videoWidth > 0) return rawPreview;
+  if (videoA && videoA.readyState >= 2) return videoA;
+  if (rawPreview && rawPreview.readyState >= 2) return rawPreview;
+  return videoA;
+}
+
 function attachStreamA(stream) {
   camStreamA = stream;
+  videoA.srcObject = stream;
+  videoA.onloadedmetadata = () => videoA.play().catch(() => {});
+  videoA.oncanplay = () => videoA.play().catch(() => {});
   bindVideo(videoA, stream).catch((err) => console.warn("videoA play warning:", err));
   if (rawPreview) {
     rawPreview.srcObject = stream;
@@ -607,6 +621,7 @@ function getOrCreatePeer(peerId) {
     const existing = remoteCams.get(peerId);
     try { existing.pc?.close(); } catch {}
     try { existing.stream?.getTracks().forEach((t) => t.stop()); } catch {}
+    existing.videoEl?.remove();
     remoteCams.delete(peerId);
   }
 
@@ -616,6 +631,18 @@ function getOrCreatePeer(peerId) {
   peerVideo.muted = true;
   peerVideo.autoplay = true;
   peerVideo.setAttribute("playsinline", "");
+  peerVideo.setAttribute("webkit-playsinline", "");
+  peerVideo.setAttribute("muted", "");
+  peerVideo.setAttribute("autoplay", "");
+  peerVideo.style.position = "fixed";
+  peerVideo.style.bottom = "0";
+  peerVideo.style.right = "0";
+  peerVideo.style.width = "4px";
+  peerVideo.style.height = "4px";
+  peerVideo.style.opacity = "0.001";
+  peerVideo.style.pointerEvents = "none";
+  peerVideo.style.zIndex = "-1";
+  document.body.appendChild(peerVideo);
 
   const peerData = {
     pc: peerPc,
@@ -645,6 +672,7 @@ function getOrCreatePeer(peerId) {
 
   peerPc.onconnectionstatechange = () => {
     if (["failed", "disconnected", "closed"].includes(peerPc.connectionState)) {
+      peerData.videoEl?.remove();
       remoteCams.delete(peerId);
       if (activePhoneId === peerId) {
         activePhoneId = remoteCams.keys().next().value || null;
@@ -685,6 +713,7 @@ async function onSignal(msg) {
     if (peer) {
       peer.stream?.getTracks().forEach((t) => t.stop());
       peer.pc?.close();
+      peer.videoEl?.remove();
       remoteCams.delete(msg.from);
       if (activePhoneId === msg.from) {
         activePhoneId = remoteCams.keys().next().value || null;
@@ -698,6 +727,7 @@ async function onSignal(msg) {
     if (peer) {
       peer.stream?.getTracks().forEach((t) => t.stop());
       peer.pc?.close();
+      peer.videoEl?.remove();
       remoteCams.delete(msg.id);
       if (activePhoneId === msg.id) {
         activePhoneId = remoteCams.keys().next().value || null;
@@ -1066,10 +1096,31 @@ function frame(now) {
     motionMask,
   });
 
+  const activeCamVideo = getActiveCameraVideo();
+  if (camStreamA && activeCamVideo && activeCamVideo.paused) {
+    activeCamVideo.play().catch(() => {});
+  }
   const phoneVideo = getActivePhoneVideo();
-  const readyA = Boolean(camStreamA && (videoA.readyState >= 2 || videoA.videoWidth > 0));
+  if (phoneVideo && phoneVideo.paused) {
+    phoneVideo.play().catch(() => {});
+  }
+
+  const readyA = Boolean(camStreamA && activeCamVideo && (activeCamVideo.readyState >= 2 || activeCamVideo.videoWidth > 0));
   const readyB = Boolean(phoneVideo && (phoneVideo.readyState >= 2 || phoneVideo.videoWidth > 0));
-  renderer.draw(readyA ? videoA : null, readyB ? phoneVideo : null);
+  renderer.draw(readyA ? activeCamVideo : (camStreamA ? activeCamVideo : null), readyB ? phoneVideo : null);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+function tryResumeMedia() {
+  if (camStreamA) {
+    if (videoA && videoA.paused) videoA.play().catch(() => {});
+    if (rawPreview && rawPreview.paused) rawPreview.play().catch(() => {});
+  }
+  const pVid = getActivePhoneVideo();
+  if (pVid && pVid.paused) pVid.play().catch(() => {});
+}
+
+window.addEventListener("click", tryResumeMedia, { passive: true });
+window.addEventListener("touchstart", tryResumeMedia, { passive: true });
+window.addEventListener("keydown", tryResumeMedia, { passive: true });

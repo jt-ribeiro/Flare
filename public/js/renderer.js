@@ -456,37 +456,32 @@ export class Renderer {
       const sw = source.videoWidth || source.width || 0;
       const sh = source.videoHeight || source.height || 0;
       if (sw > 0 && sh > 0) {
-        const curW = isA ? this.videoWA : this.videoWB;
-        const curH = isA ? this.videoHA : this.videoHB;
-        if (curW === sw && curH === sh) {
-          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+        if (isA) {
+          this.videoWA = sw;
+          this.videoHA = sh;
+          this.videoReadyA = true;
         } else {
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
-          if (isA) {
-            this.videoWA = sw;
-            this.videoHA = sh;
-          } else {
-            this.videoWB = sw;
-            this.videoHB = sh;
-          }
+          this.videoWB = sw;
+          this.videoHB = sh;
+          this.videoReadyB = true;
         }
-        if (isA) this.videoReadyA = true;
-        else this.videoReadyB = true;
       }
-    } catch {
+    } catch (err) {
+      console.warn("uploadSingle warning:", err);
       if (isA) this.videoReadyA = false;
       else this.videoReadyB = false;
     }
   }
 
   upload(sourceA, sourceB) {
-    if (sourceA && sourceA.readyState >= 2) {
+    if (sourceA && (sourceA.readyState >= 2 || sourceA.videoWidth > 0)) {
       this.uploadSingle(this.videoTexA, sourceA, true);
     } else if (sourceA === null) {
       this.videoReadyA = false;
     }
 
-    if (sourceB && sourceB.readyState >= 2) {
+    if (sourceB && (sourceB.readyState >= 2 || sourceB.videoWidth > 0)) {
       this.uploadSingle(this.videoTexB, sourceB, false);
     } else if (sourceB === null) {
       this.videoReadyB = false;
