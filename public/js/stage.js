@@ -314,7 +314,7 @@ function setSource(next, broadcast = true) {
 }
 
 function syncModUi() {
-  bassAmountEl.value = String(Math.round(bassReact * 100));
+  if (bassAmountEl) bassAmountEl.value = String(Math.round(bassReact * 100));
   if (hueShiftEl) hueShiftEl.value = String(Math.round(hueShift * 100));
   if (bpmVal) bpmVal.textContent = String(audio.bpm);
   if (randomModeSelect) randomModeSelect.value = randomMode;
@@ -324,9 +324,9 @@ function syncModUi() {
     const on = { bassFlash, bassShake, bassZoom, bassRgb }[key];
     btn.classList.toggle("active", Boolean(on));
   }
-  btnRotate.classList.toggle("active", rotateOn);
-  rotateMinsEl.value = String(rotateSec);
-  rotateEtaEl.hidden = !rotateOn;
+  if (btnRotate) btnRotate.classList.toggle("active", rotateOn);
+  if (rotateMinsEl) rotateMinsEl.value = String(rotateSec);
+  if (rotateEtaEl) rotateEtaEl.hidden = !rotateOn;
 
   if (camModeChips) {
     for (const chip of camModeChips.querySelectorAll(".chip")) {
@@ -363,7 +363,7 @@ function applyMods(msg, broadcast = false) {
   renderer.setParams({ camMode, camMix, motionMask });
   if (!applyingRemote) syncModUi();
   if (rotateChanged && rotateOn) armRotate();
-  if (!rotateOn) rotateEtaEl.hidden = true;
+  if (!rotateOn && rotateEtaEl) rotateEtaEl.hidden = true;
   if (bassWanted()) ensureMic();
   if (broadcast) net.send(modsPayload());
 }
@@ -466,16 +466,25 @@ function fillLooks() {
 }
 
 async function loadSession() {
-  const session = await fetch("/api/session").then((r) => r.json());
-  remoteLink.textContent = session.remote;
-  remoteLink.href = session.remote;
-  gateRemoteLink.textContent = session.remote;
-  gateRemoteLink.href = session.remote;
-  const qrUrl = `/api/qr.svg?url=${encodeURIComponent(session.remote)}`;
-  qrImg.src = qrUrl;
-  gateQr.src = qrUrl;
-  if (!cameraContext().secure) {
-    showGateError({ name: "SecurityError" });
+  try {
+    const session = await fetch("/api/session").then((r) => r.json());
+    if (remoteLink) {
+      remoteLink.textContent = session.remote;
+      remoteLink.href = session.remote;
+    }
+    if (gateRemoteLink) {
+      gateRemoteLink.textContent = session.remote;
+      gateRemoteLink.href = session.remote;
+    }
+    const qrUrl = `/api/qr.svg?url=${encodeURIComponent(session.remote)}`;
+    if (qrImg) qrImg.src = qrUrl;
+    if (gateQr) gateQr.src = qrUrl;
+    if (!cameraContext().secure) {
+      showGateError({ name: "SecurityError" });
+    }
+  } catch (err) {
+    console.error("loadSession failed:", err);
+    showGateError(new Error("Servidor de sessão indisponível"));
   }
 }
 
