@@ -53,6 +53,15 @@ videoA.playsInline = true;
 videoA.muted = true;
 videoA.autoplay = true;
 videoA.setAttribute("playsinline", "");
+videoA.setAttribute("webkit-playsinline", "");
+videoA.style.position = "fixed";
+videoA.style.top = "-9999px";
+videoA.style.left = "-9999px";
+videoA.style.width = "1px";
+videoA.style.height = "1px";
+videoA.style.opacity = "0";
+videoA.style.pointerEvents = "none";
+document.body.appendChild(videoA);
 
 // Multi-phone remote cameras map: peerId -> { pc, videoEl, stream, label, iceQueue }
 const remoteCams = new Map();
@@ -384,11 +393,13 @@ function getModePool(mode) {
 
 function tickRotate(now) {
   if (!rotateOn || source === "none") {
-    rotateEtaEl.hidden = true;
+    if (rotateEtaEl) rotateEtaEl.hidden = true;
     return;
   }
-  rotateEtaEl.hidden = false;
-  rotateEtaEl.textContent = `rodízio ${formatEta(rotateAt - now)}`;
+  if (rotateEtaEl) {
+    rotateEtaEl.hidden = false;
+    rotateEtaEl.textContent = `rodízio ${formatEta(rotateAt - now)}`;
+  }
   if (now >= rotateAt) {
     const mode = randomModeById(randomMode);
     const pool = getModePool(mode);
@@ -469,23 +480,28 @@ async function loadSession() {
 }
 
 async function listCameras() {
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  const cams = devices.filter((d) => d.kind === "videoinput");
-  cameraSelect.innerHTML = "";
-  for (const cam of cams) {
-    const opt = document.createElement("option");
-    opt.value = cam.deviceId;
-    opt.textContent = cam.label || "Câmara";
-    cameraSelect.append(opt);
-  }
-  cameraSelect.hidden = cams.length < 2;
+  if (!cameraSelect) return;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cams = devices.filter((d) => d.kind === "videoinput");
+    cameraSelect.innerHTML = "";
+    for (const cam of cams) {
+      const opt = document.createElement("option");
+      opt.value = cam.deviceId;
+      opt.textContent = cam.label || "Câmara";
+      cameraSelect.append(opt);
+    }
+    cameraSelect.hidden = cams.length < 2;
+  } catch {}
 }
 
 function attachStreamA(stream) {
   camStreamA = stream;
-  bindVideo(videoA, stream).catch(() => {});
-  rawPreview.srcObject = stream;
-  rawPreview.play().catch(() => {});
+  bindVideo(videoA, stream).catch((err) => console.warn("videoA play warning:", err));
+  if (rawPreview) {
+    rawPreview.srcObject = stream;
+    rawPreview.play().catch(() => {});
+  }
   updateCamUi();
   requestWakeLock();
   ensureMic();
@@ -493,7 +509,7 @@ function attachStreamA(stream) {
 }
 
 async function startCamera(deviceId) {
-  gateError.hidden = true;
+  if (gateError) gateError.hidden = true;
   const stream = await openCamera({ deviceId: deviceId || undefined });
   camStreamA?.getTracks().forEach((t) => t.stop());
   attachStreamA(stream);
@@ -745,10 +761,23 @@ setSource("none", false);
 syncModUi();
 loadSession().catch(() => showGateError(new Error("Servidor de sessão indisponível")));
 
+// Auto-detect and start camera if permission is already granted in browser
+if (navigator.mediaDevices?.getUserMedia) {
+  navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+    .then((stream) => {
+      attachStreamA(stream);
+      listCameras();
+    })
+    .catch(() => {
+      // Normal on initial load: requires user click on "Permitir câmara"
+    });
+}
+
 async function grantCam() {
   try {
     await startCamera(cameraSelect?.value);
   } catch (err) {
+    console.error("Erro ao ligar câmara:", err);
     showGateError(err);
   }
 }
@@ -938,11 +967,9 @@ function frame(now) {
   });
 
   const phoneVideo = getActivePhoneVideo();
-  const readyA = Boolean(camStreamA && videoA.readyState >= 2);
-  const readyB = Boolean(phoneVideo && phoneVideo.readyState >= 2);
-  if (readyA || readyB) {
-    renderer.draw(readyA ? videoA : null, readyB ? phoneVideo : null);
-  }
+  const readyA = Boolean(camStreamA && (videoA.readyState >= 2 || videoA.videoWidth > 0));
+  const readyB = Boolean(phoneVideo && (phoneVideo.readyState >= 2 || phoneVideo.videoWidth > 0));
+  renderer.draw(readyA ? videoA : null, readyB ? phoneVideo : null);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
