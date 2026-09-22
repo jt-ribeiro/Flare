@@ -110,7 +110,7 @@ void main() {
   vMotion = motion;
 
   float aspect = uRes.x / max(uRes.y, 1.0);
-  vec3 pos = vec3((uv.x - 0.5) * 2.8 * (aspect / 1.777), (uv.y - 0.5) * -1.6, 0.0);
+  vec3 pos = vec3((uv.x - 0.5) * 2.8 * (aspect / 1.777), (uv.y - 0.5) * 1.6, 0.0);
 
   // Depth displacement (Z axis)
   float zDisp = (luma * 1.8 - 0.4) * uIntensity;
