@@ -524,3 +524,97 @@ button {
   accent-color: var(--cyan);
 }
 
+.session-slots-box {
+  width: 100%;
+  max-width: 360px;
+  background: rgba(14, 17, 23, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 10px auto 14px;
+  text-align: center;
+}
+
+.session-slots-box.full {
+  border-color: var(--danger);
+  background: rgba(255, 42, 68, 0.12);
+}
+
+.slots-header {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+}
+
+.session-slots-box.full .slots-header {
+  color: var(--danger);
+}
+
+.session-players-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.session-player-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(212, 255, 0, 0.12);
+  border: 1px solid rgba(212, 255, 0, 0.35);
+  color: #fff;
+  text-transform: none;
+}
+
+.name-input-wrap {
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto 14px;
+  text-align: left;
+}
+
+.name-input-wrap label {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--accent);
+  margin-bottom: 6px;
+  letter-spacing: 0.08em;
+}
+
+.name-input-wrap input {
+  width: 100%;
+  padding: 13px 14px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  background: #0b0e14;
+  border: 2px solid rgba(212, 255, 0, 0.45);
+  border-radius: 5px;
+  color: #fff;
+  outline: none;
+  text-transform: none;
+}
+
+.name-input-wrap input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(212, 255, 0, 0.35);
+}
+
+.user-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(0, 240, 255, 0.14);
+  border: 1px solid var(--cyan);
+  color: var(--cyan);
+  text-transform: none;
+}
+

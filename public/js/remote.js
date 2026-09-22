@@ -30,9 +30,24 @@ const camFader = document.querySelector("#camFader");
 const motionMaskSlider = document.querySelector("#motionMaskSlider");
 const btnAuto = document.querySelector("#btnAuto");
 const dimBar = document.querySelector("#dimBar");
+const sessionSlotsBox = document.querySelector("#sessionSlotsBox");
+const sessionCountText = document.querySelector("#sessionCountText");
+const sessionPlayersList = document.querySelector("#sessionPlayersList");
+const playerNameInput = document.querySelector("#playerNameInput");
+const userBadge = document.querySelector("#userBadge");
 
 const net = connect();
 let myPeerId = "peer_" + Math.random().toString(36).slice(2, 9);
+let myPlayerName = (localStorage.getItem("flare_player_name") || "").trim().slice(0, 18);
+let activeSessions = [];
+let maxSessions = 4;
+let joinedSession = false;
+let currentSendAttempt = 0;
+
+if (playerNameInput && myPlayerName) {
+  playerNameInput.value = myPlayerName;
+}
+
 let autoModeOn = false;
 let look = DEFAULTS.look;
 let currentCategory = "all";
@@ -55,6 +70,37 @@ let rotateOn = DEFAULTS.rotate;
 let rotateSec = DEFAULTS.rotateSec;
 let hueShift = DEFAULTS.hueShift ?? 0;
 let wakeLock = null;
+
+function renderSessionsGate(sessions, max = 4) {
+  activeSessions = Array.isArray(sessions) ? sessions : [];
+  maxSessions = max || 4;
+  if (sessionCountText) {
+    sessionCountText.textContent = `${activeSessions.length} / ${maxSessions} lugares ocupados`;
+  }
+  if (sessionPlayersList) {
+    sessionPlayersList.innerHTML = "";
+    if (activeSessions.length === 0) {
+      const empty = document.createElement("span");
+      empty.className = "session-player-pill empty";
+      empty.textContent = "Nenhum telemóvel ligado";
+      sessionPlayersList.append(empty);
+    } else {
+      for (const s of activeSessions) {
+        const pill = document.createElement("span");
+        pill.className = "session-player-pill";
+        pill.textContent = `👤 ${s.name}${s.id === myPeerId ? " (tu)" : ""}`;
+        sessionPlayersList.append(pill);
+      }
+    }
+  }
+  const alreadyIn = activeSessions.some((s) => s.id === myPeerId);
+  const isFull = activeSessions.length >= maxSessions && !alreadyIn;
+  sessionSlotsBox?.classList.toggle("is-full", isFull);
+  if (btnGrantCam && cameraContext().secure) {
+    btnGrantCam.disabled = isFull;
+    btnGrantCam.textContent = isFull ? `Sessão Cheia (${maxSessions}/${maxSessions})` : "Entrar & Ligar Câmara";
+  }
+}
 
 function setCamMode(mode, broadcast = true) {
   camMode = mode;
@@ -93,8 +139,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") requestWakeLock();
 });
 
-function showGateError(err) {
-  const { title, body } = cameraErrorText(err);
+function showCustomGateError(title, body) {
   gateError.hidden = false;
   gateError.replaceChildren();
   const strong = document.createElement("strong");
@@ -102,6 +147,11 @@ function showGateError(err) {
   const span = document.createElement("span");
   span.textContent = body;
   gateError.append(strong, span);
+}
+
+function showGateError(err) {
+  const { title, body } = cameraErrorText(err);
+  showCustomGateError(title, body);
 }
 
 function setLook(id, broadcast = true) {
@@ -352,13 +402,52 @@ btnTap?.addEventListener("click", () => {
 
 net.onOpen(() => {
   statusEl.textContent = "ligado ao palco";
+  if (joinedSession && myPlayerName) {
+    net.send({ type: "joinSession", name: myPlayerName, camActive: Boolean(camStream) });
+  }
 });
 net.onClose(() => {
   statusEl.textContent = "a reconectar…";
 });
 
 net.on(async (msg) => {
+  if (msg.type === "init") {
+    if (msg.id) myPeerId = msg.id;
+    if (Array.isArray(msg.sessions)) renderSessionsGate(msg.sessions, msg.maxSessions);
+  }
+  if (msg.type === "sessionsUpdate") {
+    renderSessionsGate(msg.sessions, msg.maxSessions);
+  }
+  if (msg.type === "joinAccepted") {
+    if (msg.id) myPeerId = msg.id;
+    joinedSession = true;
+    myPlayerName = msg.name || myPlayerName;
+    if (userBadge) {
+      userBadge.textContent = `👤 ${myPlayerName}`;
+      userBadge.hidden = false;
+    }
+    if (Array.isArray(msg.sessions)) renderSessionsGate(msg.sessions, msg.maxSessions);
+    startSending().catch(showGateError);
+  }
+  if (msg.type === "joinRejected") {
+    joinedSession = false;
+    if (Array.isArray(msg.sessions)) renderSessionsGate(msg.sessions, msg.maxSessions);
+    showCustomGateError("Sessão indisponível", msg.reason || "A sessão está cheia (máximo 4 pessoas).");
+  }
+  if (msg.type === "kicked") {
+    joinedSession = false;
+    currentSendAttempt++;
+    camStream?.getTracks().forEach((t) => t.stop());
+    camStream = null;
+    pc?.close();
+    pc = null;
+    badgeCamB?.classList.remove("live");
+    app.hidden = true;
+    camGate.hidden = false;
+    showCustomGateError("Sessão terminada", msg.reason || "O palco desligou a tua sessão.");
+  }
   if (
+    msg.type === "init" ||
     msg.type === "state" ||
     msg.type === "setLook" ||
     msg.type === "setIntensity" ||
@@ -373,7 +462,7 @@ net.on(async (msg) => {
     msg.type === "setMods"
   ) {
     applying = true;
-    if (msg.look || msg.id) setLook(msg.look || msg.id, false);
+    if (msg.look || (msg.type === "setLook" && msg.id)) setLook(msg.look || msg.id, false);
     if (Number.isFinite(msg.intensity) || (msg.type === "setIntensity" && Number.isFinite(msg.value))) {
       const val = Number.isFinite(msg.intensity) ? msg.intensity : msg.value;
       intensityEl.value = String(Math.round(val * 100));
@@ -412,9 +501,6 @@ net.on(async (msg) => {
       badgeCamA?.classList.toggle("live", hasA);
       badgeCamB?.classList.toggle("live", hasB);
     }
-    if (msg.type === "init" && msg.id) {
-      myPeerId = msg.id;
-    }
     if (typeof msg.auto === "boolean") {
       autoModeOn = msg.auto;
       btnAuto?.classList.toggle("active", autoModeOn);
@@ -429,12 +515,18 @@ net.on(async (msg) => {
   }
   if (msg.type === "answer" && msg.sdp && pc) {
     if (!msg.to || msg.to === myPeerId) {
-      await pc.setRemoteDescription(msg.sdp);
-      while (iceQueue.length > 0) {
-        const cand = iceQueue.shift();
-        try {
-          await pc.addIceCandidate(cand);
-        } catch {}
+      try {
+        if (pc.signalingState === "have-local-offer") {
+          await pc.setRemoteDescription(msg.sdp);
+        }
+        while (iceQueue.length > 0) {
+          const cand = iceQueue.shift();
+          try {
+            await pc.addIceCandidate(cand);
+          } catch {}
+        }
+      } catch (err) {
+        console.warn("Erro ao aplicar answer WebRTC:", err);
       }
     }
   }
@@ -462,31 +554,86 @@ if (!cameraContext().secure) {
 }
 
 async function startSending() {
+  const attemptId = ++currentSendAttempt;
   gateError.hidden = true;
   camStream?.getTracks().forEach((t) => t.stop());
   pc?.close();
   pc = null;
   iceQueue = [];
 
-  camStream = await openCamera({ facingMode });
+  const stream = await openCamera({ facingMode });
+  if (attemptId !== currentSendAttempt) {
+    stream.getTracks().forEach((t) => t.stop());
+    return;
+  }
+  camStream = stream;
   bindVideo(preview, camStream).catch(() => {});
   requestWakeLock();
   badgeCamB?.classList.add("live");
 
-  pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
-  for (const track of camStream.getTracks()) pc.addTrack(track, camStream);
-  pc.onicecandidate = (ev) => {
-    if (ev.candidate) net.send({ type: "ice", from: myPeerId, to: "stage", candidate: ev.candidate });
+  const localPc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+  pc = localPc;
+
+  for (const track of camStream.getTracks()) {
+    localPc.addTrack(track, camStream);
+  }
+
+  localPc.onicecandidate = (ev) => {
+    if (localPc === pc && ev.candidate) {
+      net.send({ type: "ice", from: myPeerId, name: myPlayerName, to: "stage", candidate: ev.candidate });
+    }
   };
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  net.send({ type: "offer", from: myPeerId, to: "stage", sdp: pc.localDescription });
+
+  try {
+    await localPc.setLocalDescription();
+  } catch {
+    const offer = await localPc.createOffer();
+    if (attemptId !== currentSendAttempt || localPc !== pc) {
+      localPc.close();
+      return;
+    }
+    await localPc.setLocalDescription(offer);
+  }
+
+  if (attemptId !== currentSendAttempt || localPc !== pc) {
+    localPc.close();
+    return;
+  }
+
+  net.send({
+    type: "offer",
+    from: myPeerId,
+    name: myPlayerName,
+    to: "stage",
+    sdp: localPc.localDescription,
+  });
+
   camGate.hidden = true;
   app.hidden = false;
 }
 
-btnGrantCam.addEventListener("click", () => {
-  startSending().catch(showGateError);
+function handleRequestJoin() {
+  const nameVal = (playerNameInput?.value || "").trim().slice(0, 18);
+  if (!nameVal) {
+    showCustomGateError(
+      "Nome obrigatório",
+      "Por favor escreve o teu nome ou alcunha (máx. 4 pessoas na sessão) antes de entrar."
+    );
+    playerNameInput?.focus();
+    return;
+  }
+  myPlayerName = nameVal;
+  localStorage.setItem("flare_player_name", myPlayerName);
+  gateError.hidden = true;
+  net.send({ type: "joinSession", name: myPlayerName, camActive: true });
+}
+
+btnGrantCam.addEventListener("click", handleRequestJoin);
+playerNameInput?.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    handleRequestJoin();
+  }
 });
 
 document.querySelector("#btnFlip").addEventListener("click", () => {
@@ -495,11 +642,15 @@ document.querySelector("#btnFlip").addEventListener("click", () => {
 });
 
 document.querySelector("#btnStopCam").addEventListener("click", () => {
+  currentSendAttempt++;
+  joinedSession = false;
   camStream?.getTracks().forEach((t) => t.stop());
+  camStream = null;
   pc?.close();
   pc = null;
   badgeCamB?.classList.remove("live");
   net.send({ type: "stopCam", from: myPeerId });
+  net.send({ type: "leaveSession", from: myPeerId });
   app.hidden = true;
   camGate.hidden = false;
 });

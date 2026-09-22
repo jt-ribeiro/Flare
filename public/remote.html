@@ -10,10 +10,27 @@
   </head>
   <body>
     <div id="camGate" class="gate">
-      <p class="kicker">FLARE</p>
-      <h1>Liga a câmara</h1>
-      <p id="gateLead">Este telemóvel filma a sala e envia o vídeo para o projetor.</p>
-      <button type="button" id="btnGrantCam" class="xl">Ligar câmara</button>
+      <p class="kicker">FLARE · SESSÃO LIVE (MÁX. 4 PESSOAS)</p>
+      <h1>Entrar no Palco</h1>
+      <p id="gateLead">Escolhe o teu nome para controlar os visuais e transmitir a tua câmara para o projetor.</p>
+
+      <div class="session-slots-box" id="sessionSlotsBox">
+        <span class="slots-header" id="sessionCountText">👥 0 / 4 lugares ocupados</span>
+        <div class="session-players-list" id="sessionPlayersList"></div>
+      </div>
+
+      <div class="name-input-wrap" id="nameInputWrap">
+        <label for="playerNameInput">👤 O TEU NOME (OBRIGATÓRIO)</label>
+        <input
+          id="playerNameInput"
+          type="text"
+          maxlength="18"
+          placeholder="Ex: João, DJ Rita, Pista..."
+          autocomplete="nickname"
+        />
+      </div>
+
+      <button type="button" id="btnGrantCam" class="xl">Entrar &amp; Ligar Câmara</button>
       <div id="gateError" class="error" hidden></div>
     </div>
 
@@ -22,6 +39,7 @@
         <div class="brand">
           <span class="dot on" id="dot"></span>
           <strong>FLARE</strong>
+          <span class="user-badge" id="userBadge">👤 —</span>
           <span class="vibe-badge" id="vibeBadge">☣️ FREE TEKNO</span>
         </div>
         <div class="header-actions">

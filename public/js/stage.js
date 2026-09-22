@@ -70,6 +70,18 @@ document.body.appendChild(videoA);
 // Multi-phone remote cameras map: peerId -> { pc, videoEl, stream, label, iceQueue }
 const remoteCams = new Map();
 let activePhoneId = null;
+let activeSessions = [];
+let maxSessions = 4;
+
+net.onOpen(() => {
+  net.send({ type: "registerStage" });
+});
+net.send({ type: "registerStage" });
+
+function getSessionName(peerId) {
+  const found = activeSessions.find((s) => s.id === peerId);
+  return found?.name || "";
+}
 
 let autoMode = false;
 let autoLookTimer = 0;
@@ -158,10 +170,11 @@ function updateCamUi() {
     for (const el of camBadges.querySelectorAll(".phone-badge")) el.remove();
     let i = 1;
     for (const [peerId, peer] of remoteCams) {
+      const displayName = getSessionName(peerId) || peer.label || `TEL ${i}`;
       const badge = document.createElement("span");
       badge.className = "cam-badge live phone-badge";
       badge.dataset.peer = peerId;
-      badge.innerHTML = `B${remoteCams.size > 1 ? i : ""}: TEL ${i} <i class="indicator"></i>`;
+      badge.innerHTML = `📱 ${displayName.toUpperCase()} <i class="indicator"></i>`;
       camBadges.append(badge);
       i++;
     }
@@ -169,22 +182,50 @@ function updateCamUi() {
 
   if (phoneListChips) {
     phoneListChips.innerHTML = "";
-    if (remoteCams.size === 0) {
-      phoneListChips.innerHTML = `<span class="no-phones-hint">Lê o QR com o telemóvel para ligar câmaras em direto</span>`;
+    const allPeerIds = new Set([...remoteCams.keys(), ...activeSessions.map((s) => s.id)]);
+    if (allPeerIds.size === 0) {
+      phoneListChips.innerHTML = `<span class="no-phones-hint">Sessão (0/${maxSessions}) · Lê o QR com o telemóvel para entrar com nome</span>`;
     } else {
       let i = 1;
-      for (const [peerId, peer] of remoteCams) {
+      for (const peerId of allPeerIds) {
+        const peer = remoteCams.get(peerId);
+        const displayName = getSessionName(peerId) || peer?.label || `TEL ${i}`;
+        const hasCam = Boolean(peer && peer.stream);
+        const isActive = (!activePhoneId && i === 1 && hasCam) || activePhoneId === peerId;
+
+        const wrap = document.createElement("span");
+        wrap.style.display = "inline-flex";
+        wrap.style.alignItems = "center";
+        wrap.style.gap = "2px";
+
         const btn = document.createElement("button");
         btn.type = "button";
-        const isActive = (!activePhoneId && i === 1) || activePhoneId === peerId;
         btn.className = `chip ${isActive ? "active" : ""}`;
-        btn.textContent = `TEL ${i} (${peerId.slice(5, 9)})`;
+        btn.textContent = `${hasCam ? "📹" : "👤"} ${displayName}`;
+        btn.title = hasCam ? `Selecionar câmara de ${displayName}` : `${displayName} na sessão (a ligar câmara...)`;
         btn.addEventListener("click", () => {
-          activePhoneId = peerId;
-          updateCamUi();
-          toast(`Câmara B mudada para TEL ${i}`);
+          if (remoteCams.has(peerId)) {
+            activePhoneId = peerId;
+            updateCamUi();
+            toast(`Câmara B mudada para ${displayName}`);
+          }
         });
-        phoneListChips.append(btn);
+
+        const kickBtn = document.createElement("button");
+        kickBtn.type = "button";
+        kickBtn.className = "chip";
+        kickBtn.style.padding = "4px 7px";
+        kickBtn.style.opacity = "0.75";
+        kickBtn.textContent = "✕";
+        kickBtn.title = `Desligar sessão de ${displayName}`;
+        kickBtn.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          net.send({ type: "kickPeer", id: peerId });
+          toast(`Sessão de ${displayName} terminada`);
+        });
+
+        wrap.append(btn, kickBtn);
+        phoneListChips.append(wrap);
         i++;
       }
     }
@@ -616,7 +657,7 @@ async function startCamera(deviceId) {
   toast("Câmara A (PC) ligada");
 }
 
-function getOrCreatePeer(peerId) {
+function getOrCreatePeer(peerId, peerName) {
   if (remoteCams.has(peerId)) {
     const existing = remoteCams.get(peerId);
     try { existing.pc?.close(); } catch {}
@@ -644,11 +685,12 @@ function getOrCreatePeer(peerId) {
   peerVideo.style.zIndex = "-1";
   document.body.appendChild(peerVideo);
 
+  const resolvedName = (peerName || getSessionName(peerId) || `TEL ${remoteCams.size + 1}`).trim();
   const peerData = {
     pc: peerPc,
     videoEl: peerVideo,
     stream: null,
-    label: `TEL ${remoteCams.size + 1}`,
+    label: resolvedName,
     iceQueue: [],
   };
   remoteCams.set(peerId, peerData);
@@ -662,12 +704,17 @@ function getOrCreatePeer(peerId) {
   peerPc.ontrack = (ev) => {
     const stream = ev.streams[0] || new MediaStream([ev.track]);
     peerData.stream = stream;
+    peerVideo.srcObject = stream;
+    peerVideo.onloadedmetadata = () => peerVideo.play().catch(() => {});
+    peerVideo.oncanplay = () => peerVideo.play().catch(() => {});
     bindVideo(peerVideo, stream).catch(() => {});
-    if (!activePhoneId) activePhoneId = peerId;
+    if (!activePhoneId || !remoteCams.has(activePhoneId)) activePhoneId = peerId;
+    const currentName = getSessionName(peerId) || peerData.label;
+    peerData.label = currentName;
     updateCamUi();
     ensureMic();
     requestWakeLock();
-    toast(`Câmara do Telemóvel (${peerData.label}) ligada!`);
+    toast(`📱 Câmara de ${currentName} ligada!`);
   };
 
   peerPc.onconnectionstatechange = () => {
@@ -686,10 +733,14 @@ function getOrCreatePeer(peerId) {
 
 async function onSignal(msg) {
   if (msg.type === "offer" && msg.sdp && msg.from) {
-    const peer = getOrCreatePeer(msg.from);
+    const peer = getOrCreatePeer(msg.from, msg.name);
     await peer.pc.setRemoteDescription(msg.sdp);
-    const answer = await peer.pc.createAnswer();
-    await peer.pc.setLocalDescription(answer);
+    try {
+      await peer.pc.setLocalDescription();
+    } catch {
+      const answer = await peer.pc.createAnswer();
+      await peer.pc.setLocalDescription(answer);
+    }
     net.send({ type: "answer", to: msg.from, from: "stage", sdp: peer.pc.localDescription });
     while (peer.iceQueue.length > 0) {
       const cand = peer.iceQueue.shift();
@@ -711,6 +762,7 @@ async function onSignal(msg) {
   if (msg.type === "stopCam" && msg.from) {
     const peer = remoteCams.get(msg.from);
     if (peer) {
+      const who = getSessionName(msg.from) || peer.label || "Telemóvel";
       peer.stream?.getTracks().forEach((t) => t.stop());
       peer.pc?.close();
       peer.videoEl?.remove();
@@ -719,11 +771,12 @@ async function onSignal(msg) {
         activePhoneId = remoteCams.keys().next().value || null;
       }
       updateCamUi();
-      toast("Câmara do telemóvel desligada");
+      toast(`Câmara de ${who} desligada`);
     }
   }
   if (msg.type === "peerDisconnect" && msg.id) {
     const peer = remoteCams.get(msg.id);
+    const who = msg.name || getSessionName(msg.id) || peer?.label;
     if (peer) {
       peer.stream?.getTracks().forEach((t) => t.stop());
       peer.pc?.close();
@@ -732,8 +785,9 @@ async function onSignal(msg) {
       if (activePhoneId === msg.id) {
         activePhoneId = remoteCams.keys().next().value || null;
       }
-      updateCamUi();
     }
+    updateCamUi();
+    if (who) toast(`${who} saiu da sessão`);
   }
 }
 
@@ -830,6 +884,29 @@ function applyIncomingState(msg) {
 }
 
 net.on((msg) => {
+  if (msg.type === "init") {
+    net.send({ type: "registerStage" });
+    if (Array.isArray(msg.sessions)) {
+      activeSessions = msg.sessions;
+      maxSessions = msg.maxSessions || 4;
+      updateCamUi();
+    }
+    applyIncomingState(msg);
+  }
+  if (msg.type === "sessionsUpdate") {
+    const prevCount = activeSessions.length;
+    activeSessions = Array.isArray(msg.sessions) ? msg.sessions : [];
+    maxSessions = msg.maxSessions || 4;
+    for (const s of activeSessions) {
+      const peer = remoteCams.get(s.id);
+      if (peer) peer.label = s.name;
+    }
+    updateCamUi();
+    if (activeSessions.length > prevCount) {
+      const newest = activeSessions[activeSessions.length - 1];
+      if (newest?.name) toast(`👤 ${newest.name} entrou na sessão (${activeSessions.length}/${maxSessions})`);
+    }
+  }
   if (msg.type === "state") applyIncomingState(msg);
   if (msg.type === "setLook") setLook(msg.id, false);
   if (msg.type === "setIntensity") setIntensity(msg.value, false);

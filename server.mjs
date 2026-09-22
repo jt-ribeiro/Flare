@@ -199,10 +199,35 @@ function broadcast(msg, except) {
   }
 }
 
+const MAX_REMOTE_SESSIONS = 4;
+const remoteSessions = new Map(); // ws.id -> { id, name, joinedAt, camActive }
+
+function getSessionsList() {
+  return Array.from(remoteSessions.values());
+}
+
+function broadcastSessions() {
+  broadcast({
+    type: "sessionsUpdate",
+    sessions: getSessionsList(),
+    maxSessions: MAX_REMOTE_SESSIONS,
+  });
+}
+
 wss.on("connection", (ws) => {
   ws.id = "peer_" + Math.random().toString(36).slice(2, 9);
+  ws.role = "unknown";
+  ws.userName = "";
   sockets.add(ws);
-  ws.send(JSON.stringify({ type: "init", id: ws.id, ...state }));
+  ws.send(
+    JSON.stringify({
+      type: "init",
+      id: ws.id,
+      sessions: getSessionsList(),
+      maxSessions: MAX_REMOTE_SESSIONS,
+      ...state,
+    })
+  );
   ws.send(JSON.stringify({ type: "peers", count: sockets.size }));
   broadcast({ type: "peers", count: sockets.size }, ws);
 
@@ -213,16 +238,136 @@ wss.on("connection", (ws) => {
     } catch {
       return;
     }
-    if (!msg.from) msg.from = ws.id;
+    if (ws.role !== "stage" && msg.from !== "stage") msg.from = ws.id;
+    else if (!msg.from) msg.from = ws.id;
+    if (ws.userName && !msg.name) msg.name = ws.userName;
+
+    if (msg.type === "registerStage") {
+      ws.role = "stage";
+      ws.send(
+        JSON.stringify({
+          type: "sessionsUpdate",
+          sessions: getSessionsList(),
+          maxSessions: MAX_REMOTE_SESSIONS,
+        })
+      );
+      return;
+    }
+
+    if (msg.type === "joinSession") {
+      const rawName = String(msg.name || "").trim().slice(0, 18);
+      if (!rawName) {
+        ws.send(
+          JSON.stringify({
+            type: "joinRejected",
+            reason: "Por favor introduz o teu nome para entrar.",
+          })
+        );
+        return;
+      }
+      if (!remoteSessions.has(ws.id) && remoteSessions.size >= MAX_REMOTE_SESSIONS) {
+        ws.send(
+          JSON.stringify({
+            type: "joinRejected",
+            reason: `Sessão cheia! Já estão ${MAX_REMOTE_SESSIONS}/${MAX_REMOTE_SESSIONS} pessoas ligadas.`,
+            sessions: getSessionsList(),
+            maxSessions: MAX_REMOTE_SESSIONS,
+          })
+        );
+        return;
+      }
+      ws.role = "remote";
+      ws.userName = rawName;
+      const entry = {
+        id: ws.id,
+        name: rawName,
+        joinedAt: remoteSessions.get(ws.id)?.joinedAt || Date.now(),
+        camActive: Boolean(msg.camActive),
+      };
+      remoteSessions.set(ws.id, entry);
+      ws.send(
+        JSON.stringify({
+          type: "joinAccepted",
+          id: ws.id,
+          name: rawName,
+          sessions: getSessionsList(),
+          maxSessions: MAX_REMOTE_SESSIONS,
+        })
+      );
+      broadcastSessions();
+      return;
+    }
+
+    if (msg.type === "leaveSession") {
+      if (remoteSessions.has(ws.id)) {
+        const entry = remoteSessions.get(ws.id);
+        remoteSessions.delete(ws.id);
+        broadcast({ type: "peerDisconnect", id: ws.id, name: entry?.name });
+        broadcastSessions();
+      }
+      return;
+    }
+
+    if (msg.type === "kickPeer" && typeof msg.id === "string") {
+      const entry = remoteSessions.get(msg.id);
+      remoteSessions.delete(msg.id);
+      for (const s of sockets) {
+        if (s.id === msg.id && s.readyState === 1) {
+          s.send(
+            JSON.stringify({
+              type: "kicked",
+              reason: "A tua sessão foi terminada pelo Palco.",
+            })
+          );
+        }
+      }
+      broadcast({ type: "peerDisconnect", id: msg.id, name: entry?.name });
+      broadcastSessions();
+      return;
+    }
 
     // Targeted routing (WebRTC signaling between stage and a specific phone)
     if (msg.to) {
+      if (msg.type === "offer" && remoteSessions.has(ws.id)) {
+        remoteSessions.get(ws.id).camActive = true;
+        broadcastSessions();
+      }
+      if (msg.type === "stopCam" && remoteSessions.has(ws.id)) {
+        remoteSessions.get(ws.id).camActive = false;
+        broadcastSessions();
+      }
+      if (msg.to === "stage") {
+        let sentToStage = false;
+        for (const s of sockets) {
+          if (s.role === "stage" && s.readyState === 1) {
+            s.send(JSON.stringify(msg));
+            sentToStage = true;
+          }
+        }
+        if (!sentToStage) {
+          for (const s of sockets) {
+            if (s !== ws && s.role !== "remote" && s.readyState === 1) {
+              s.send(JSON.stringify(msg));
+            }
+          }
+        }
+        return;
+      }
       for (const s of sockets) {
         if (s.id === msg.to && s.readyState === 1) {
           s.send(JSON.stringify(msg));
           return;
         }
       }
+      return;
+    }
+
+    if (msg.type === "stopCam") {
+      if (remoteSessions.has(ws.id)) {
+        remoteSessions.get(ws.id).camActive = false;
+        broadcastSessions();
+      }
+      broadcast(msg, ws);
       return;
     }
 
@@ -312,7 +457,11 @@ wss.on("connection", (ws) => {
 
   ws.on("close", () => {
     sockets.delete(ws);
-    broadcast({ type: "peerDisconnect", id: ws.id });
+    const hadSession = remoteSessions.has(ws.id);
+    const entry = remoteSessions.get(ws.id);
+    remoteSessions.delete(ws.id);
+    broadcast({ type: "peerDisconnect", id: ws.id, name: entry?.name || ws.userName });
+    if (hadSession) broadcastSessions();
     broadcast({ type: "peers", count: sockets.size });
   });
 });
