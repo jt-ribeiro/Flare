@@ -57,23 +57,30 @@ export const LOOKS = [
 ];
 
 export const RANDOM_MODES = [
-  // 🎲 TOTALMENTE RANDOM
+  // 🌐 MODOS DIMENSÃO & AUTO
   {
     id: "random_all",
-    name: "🎲 Tudo Totalmente Random",
-    hint: "Qualquer visual (2D & 3D LiDAR)",
-    badge: "🎲 TUDO RANDOM",
-    type: "random",
-    category: "all",
+    name: "🌐 Modo Auto: 2D + 3D (Tudo)",
+    hint: "Roda todos os 34 visuais (2D & 3D)",
+    badge: "🌐 2D + 3D",
+    type: "dimension",
+    dimension: "all",
   },
-  // 🌌 3D LIDAR
   {
-    id: "random_lidar",
-    name: "🌌 Random: 3D LiDAR (Afterlife)",
-    hint: "Apenas visuais 3D holográficos",
-    badge: "🌌 3D LIDAR",
-    type: "random",
-    category: "lidar",
+    id: "random_3d",
+    name: "🌌 Modo Auto: Apenas 3D LiDAR",
+    hint: "Roda apenas hologramas 3D Afterlife",
+    badge: "🌌 SÓ 3D",
+    type: "dimension",
+    dimension: "3d",
+  },
+  {
+    id: "random_2d",
+    name: "📺 Modo Auto: Apenas 2D (Rave)",
+    hint: "Roda apenas efeitos 2D clássicos",
+    badge: "📺 SÓ 2D",
+    type: "dimension",
+    dimension: "2d",
   },
   // 📁 RANDOM POR CATEGORIA
   {
@@ -843,6 +850,24 @@ export function lookById(id) {
 
 export function randomModeById(id) {
   return RANDOM_MODES.find((m) => m.id === id) || RANDOM_MODES[0];
+}
+
+export function is3DLook(lookOrId) {
+  const id = typeof lookOrId === "string" ? lookOrId : lookOrId?.id;
+  return typeof id === "string" && id.startsWith("lidar");
+}
+
+export function filterLooks(dimension = "all", category = "all") {
+  let list = LOOKS;
+  if (dimension === "3d") {
+    list = list.filter((l) => is3DLook(l));
+  } else if (dimension === "2d") {
+    list = list.filter((l) => !is3DLook(l));
+  }
+  if (category && category !== "all") {
+    list = list.filter((l) => l.category === category);
+  }
+  return list;
 }
 
 export const TRANSITION_GLSL = `#version 300 es

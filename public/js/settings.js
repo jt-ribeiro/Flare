@@ -16,6 +16,8 @@ export const DEFAULTS = {
   camMode: "auto",
   camMix: 0.5,
   motionMask: 0.0,
+  dimension: "all",
+  autoScope: "all",
 };
 
 export const ROTATE_OPTIONS = [

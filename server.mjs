@@ -176,6 +176,8 @@ let state = {
   camMix: 0.5,
   motionMask: 0.0,
   auto: false,
+  dimension: "all",
+  autoScope: "all",
 };
 
 function onUpgrade(req, socket, head) {
@@ -269,6 +271,17 @@ wss.on("connection", (ws) => {
       broadcast({ type: "state", ...state });
       return;
     }
+    if (msg.type === "setDimension" && typeof msg.dimension === "string") {
+      state.dimension = msg.dimension;
+      state.autoScope = msg.dimension;
+      broadcast({ type: "state", ...state });
+      return;
+    }
+    if (msg.type === "setAutoScope" && typeof msg.scope === "string") {
+      state.autoScope = msg.scope;
+      broadcast({ type: "state", ...state });
+      return;
+    }
     if (msg.type === "setSource" && typeof msg.source === "string") {
       state.source = msg.source;
       broadcast({ type: "state", ...state });
@@ -289,6 +302,8 @@ wss.on("connection", (ws) => {
       if (Number.isFinite(msg.camMix)) state.camMix = Math.min(1, Math.max(0, msg.camMix));
       if (Number.isFinite(msg.motionMask)) state.motionMask = Math.min(1, Math.max(0, msg.motionMask));
       if (typeof msg.auto === "boolean") state.auto = msg.auto;
+      if (typeof msg.dimension === "string") state.dimension = msg.dimension;
+      if (typeof msg.autoScope === "string") state.autoScope = msg.autoScope;
       broadcast({ type: "state", ...state });
       return;
     }

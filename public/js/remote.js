@@ -1,5 +1,5 @@
 import { bindVideo, cameraContext, cameraErrorText, openCamera } from "./camera.js";
-import { CATEGORIES, LOOKS, RANDOM_MODES, lookById, randomModeById } from "./looks.js";
+import { CATEGORIES, LOOKS, RANDOM_MODES, lookById, randomModeById, filterLooks, is3DLook } from "./looks.js";
 import { connect } from "./net.js";
 import { DEFAULTS } from "./settings.js";
 
@@ -29,12 +29,15 @@ const camModeChips = document.querySelector("#camModeChips");
 const camFader = document.querySelector("#camFader");
 const motionMaskSlider = document.querySelector("#motionMaskSlider");
 const btnAuto = document.querySelector("#btnAuto");
+const dimBar = document.querySelector("#dimBar");
 
 const net = connect();
 let myPeerId = "peer_" + Math.random().toString(36).slice(2, 9);
 let autoModeOn = false;
 let look = DEFAULTS.look;
 let currentCategory = "all";
+let dimension = DEFAULTS.dimension || "all";
+let autoScope = DEFAULTS.autoScope || "all";
 let randomMode = DEFAULTS.randomMode || "free_tekno";
 let camMode = DEFAULTS.camMode || "auto";
 let camMix = DEFAULTS.camMix ?? 0.5;
@@ -119,10 +122,57 @@ function setRandomMode(id, broadcast = true) {
   if (broadcast) net.send({ type: "setRandomMode", id: randomMode });
 }
 
+function setDimension(dim, broadcast = true) {
+  dimension = dim || "all";
+  autoScope = dimension;
+  if (dimBar) {
+    for (const chip of dimBar.querySelectorAll(".dim-chip")) {
+      chip.classList.toggle("active", chip.dataset.dim === dimension);
+    }
+  }
+
+  const is3D = is3DLook(look);
+  const mismatch = (dimension === "3d" && !is3D) || (dimension === "2d" && is3D);
+  if (mismatch) {
+    const pool = filterLooks(dimension, "all");
+    if (pool.length > 0) {
+      setLook(pool[0].id, broadcast);
+    }
+  }
+
+  if (dimension === "3d" && randomMode !== "random_3d") {
+    setRandomMode("random_3d", false);
+  } else if (dimension === "2d" && (randomMode === "random_3d" || randomMode === "random_all")) {
+    setRandomMode("random_2d", false);
+  } else if (dimension === "all" && (randomMode === "random_3d" || randomMode === "random_2d")) {
+    setRandomMode("random_all", false);
+  }
+
+  fillCategories();
+  fillLooks();
+
+  if (broadcast) {
+    if (navigator.vibrate) navigator.vibrate(15);
+    net.send({ type: "setDimension", dimension });
+  }
+}
+
 function fillCategories() {
   if (!catBar) return;
   catBar.innerHTML = "";
-  for (const cat of CATEGORIES) {
+
+  const available = CATEGORIES.filter((cat) => {
+    if (cat.id === "all") return true;
+    if (dimension === "3d") return cat.id === "lidar";
+    if (dimension === "2d") return cat.id !== "lidar";
+    return true;
+  });
+
+  if (!available.some((c) => c.id === currentCategory)) {
+    currentCategory = "all";
+  }
+
+  for (const cat of available) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `cat-chip ${cat.id === currentCategory ? "active" : ""}`;
@@ -150,13 +200,17 @@ function fillRandomModes() {
   randomModeSelect.value = randomMode;
   if (vibeBadge) vibeBadge.textContent = randomModeById(randomMode).badge;
   randomModeSelect.addEventListener("change", () => {
-    setRandomMode(randomModeSelect.value, true);
+    const val = randomModeSelect.value;
+    setRandomMode(val, true);
+    if (val === "random_3d") setDimension("3d", true);
+    else if (val === "random_2d") setDimension("2d", true);
+    else if (val === "random_all") setDimension("all", true);
   });
 }
 
 function fillLooks() {
   looksEl.innerHTML = "";
-  const list = currentCategory === "all" ? LOOKS : LOOKS.filter((l) => l.category === currentCategory);
+  const list = filterLooks(dimension, currentCategory);
   for (const item of list) {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -187,6 +241,11 @@ function syncModUi() {
   }
   if (camFader) camFader.value = String(Math.round(camMix * 100));
   if (motionMaskSlider) motionMaskSlider.value = String(Math.round(motionMask * 100));
+  if (dimBar) {
+    for (const chip of dimBar.querySelectorAll(".dim-chip")) {
+      chip.classList.toggle("active", chip.dataset.dim === dimension);
+    }
+  }
 }
 
 function applyMods(msg, broadcast) {
@@ -205,6 +264,13 @@ function applyMods(msg, broadcast) {
   if (typeof msg.camMode === "string") camMode = msg.camMode;
   if (Number.isFinite(msg.camMix)) camMix = Math.min(1, Math.max(0, msg.camMix));
   if (Number.isFinite(msg.motionMask)) motionMask = Math.min(1, Math.max(0, msg.motionMask));
+  if (typeof msg.dimension === "string") {
+    dimension = msg.dimension;
+    autoScope = msg.autoScope || msg.dimension;
+    fillCategories();
+    fillLooks();
+  }
+  if (typeof msg.autoScope === "string") autoScope = msg.autoScope;
 
   syncModUi();
   if (broadcast) {
@@ -222,6 +288,8 @@ function applyMods(msg, broadcast) {
       camMode,
       camMix,
       motionMask,
+      dimension,
+      autoScope,
     });
   }
 }
@@ -229,6 +297,7 @@ function applyMods(msg, broadcast) {
 fillCategories();
 fillRandomModes();
 fillLooks();
+setDimension(dimension, false);
 
 intensityEl.addEventListener("input", () => {
   if (!applying) net.send({ type: "setIntensity", value: Number(intensityEl.value) / 100 });
@@ -299,6 +368,8 @@ net.on(async (msg) => {
     msg.type === "setCamMode" ||
     msg.type === "setCamMix" ||
     msg.type === "setMotionMask" ||
+    msg.type === "setDimension" ||
+    msg.type === "setAutoScope" ||
     msg.type === "setMods"
   ) {
     applying = true;
@@ -328,6 +399,12 @@ net.on(async (msg) => {
     if (Number.isFinite(msg.motionMask) || (msg.type === "setMotionMask" && Number.isFinite(msg.value))) {
       const val = Number.isFinite(msg.motionMask) ? msg.motionMask : msg.value;
       setMotionMask(val, false);
+    }
+    if (typeof msg.dimension === "string") {
+      setDimension(msg.dimension, false);
+    }
+    if (typeof msg.autoScope === "string" || (msg.type === "setAutoScope" && typeof msg.scope === "string")) {
+      autoScope = msg.autoScope || msg.scope;
     }
     if (msg.source) {
       const hasA = msg.source === "camera" || msg.source === "dual";
@@ -432,5 +509,11 @@ btnAuto?.addEventListener("click", () => {
   btnAuto.classList.toggle("active", autoModeOn);
   net.send({ type: "setAuto", enabled: autoModeOn });
 });
+
+if (dimBar) {
+  for (const chip of dimBar.querySelectorAll(".dim-chip")) {
+    chip.addEventListener("click", () => setDimension(chip.dataset.dim, true));
+  }
+}
 
 syncModUi();

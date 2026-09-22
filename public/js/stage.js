@@ -1,6 +1,6 @@
 import { AudioPulse } from "./audio.js";
 import { bindVideo, cameraContext, cameraErrorText, openCamera } from "./camera.js";
-import { CATEGORIES, LOOKS, RANDOM_MODES, lookById, randomModeById } from "./looks.js";
+import { CATEGORIES, LOOKS, RANDOM_MODES, lookById, randomModeById, filterLooks, is3DLook } from "./looks.js";
 import { connect } from "./net.js";
 import { Renderer } from "./renderer.js";
 import { DEFAULTS } from "./settings.js";
@@ -43,6 +43,7 @@ const btnExitAuto = document.querySelector("#btnExitAuto");
 const btnToggleDock = document.querySelector("#btnToggleDock");
 const dock = document.querySelector("#dock");
 const phoneListChips = document.querySelector("#phoneListChips");
+const dimBar = document.querySelector("#dimBar");
 
 const renderer = new Renderer(canvas);
 const audio = new AudioPulse();
@@ -81,6 +82,8 @@ let camMode = DEFAULTS.camMode || "auto";
 let camMix = DEFAULTS.camMix ?? 0.5;
 let motionMask = DEFAULTS.motionMask ?? 0.0;
 let currentCategory = "all";
+let dimension = DEFAULTS.dimension || "all";
+let autoScope = DEFAULTS.autoScope || "all";
 let source = "none";
 let camStreamA = null;
 let recorder = null;
@@ -239,6 +242,8 @@ function modsPayload() {
     camMode,
     camMix,
     motionMask,
+    dimension,
+    autoScope,
   };
 }
 
@@ -273,6 +278,42 @@ function setRandomMode(id, broadcast = true) {
   if (vibeBadge) vibeBadge.textContent = randomModeById(randomMode).badge;
   if (rotateOn) armRotate();
   if (broadcast) net.send({ type: "setRandomMode", id: randomMode });
+}
+
+function setDimension(dim, broadcast = true) {
+  dimension = dim || "all";
+  autoScope = dimension;
+  if (dimBar) {
+    for (const chip of dimBar.querySelectorAll(".dim-chip")) {
+      chip.classList.toggle("active", chip.dataset.dim === dimension);
+    }
+  }
+
+  // If current look does not belong to selected dimension, switch to the first matching look
+  const is3D = is3DLook(look);
+  const mismatch = (dimension === "3d" && !is3D) || (dimension === "2d" && is3D);
+  if (mismatch) {
+    const pool = filterLooks(dimension, "all");
+    if (pool.length > 0) {
+      setLook(pool[0].id, broadcast, false, 3000);
+    }
+  }
+
+  // Sync randomMode if user was on a dimension-specific random mode
+  if (dimension === "3d" && randomMode !== "random_3d") {
+    setRandomMode("random_3d", false);
+  } else if (dimension === "2d" && (randomMode === "random_3d" || randomMode === "random_all")) {
+    setRandomMode("random_2d", false);
+  } else if (dimension === "all" && (randomMode === "random_3d" || randomMode === "random_2d")) {
+    setRandomMode("random_all", false);
+  }
+
+  fillCategories();
+  fillLooks();
+
+  if (broadcast) {
+    net.send({ type: "setDimension", dimension });
+  }
 }
 
 function setIntensity(value, broadcast = true) {
@@ -343,6 +384,11 @@ function syncModUi() {
   if (btnMotionMaskToggle) {
     btnMotionMaskToggle.classList.toggle("active", motionMask > 0.05);
   }
+  if (dimBar) {
+    for (const chip of dimBar.querySelectorAll(".dim-chip")) {
+      chip.classList.toggle("active", chip.dataset.dim === dimension);
+    }
+  }
 }
 
 function applyMods(msg, broadcast = false) {
@@ -360,6 +406,13 @@ function applyMods(msg, broadcast = false) {
   if (typeof msg.camMode === "string") camMode = msg.camMode;
   if (Number.isFinite(msg.camMix)) camMix = Math.min(1, Math.max(0, msg.camMix));
   if (Number.isFinite(msg.motionMask)) motionMask = Math.min(1, Math.max(0, msg.motionMask));
+  if (typeof msg.dimension === "string") {
+    dimension = msg.dimension;
+    autoScope = msg.autoScope || msg.dimension;
+    fillCategories();
+    fillLooks();
+  }
+  if (typeof msg.autoScope === "string") autoScope = msg.autoScope;
   renderer.setParams({ camMode, camMix, motionMask });
   if (!applyingRemote) syncModUi();
   if (rotateChanged && rotateOn) armRotate();
@@ -380,15 +433,22 @@ function formatEta(ms) {
 }
 
 function getModePool(mode) {
-  if (!mode) return LOOKS;
+  if (!mode) return filterLooks(autoScope, "all");
+  if (mode.type === "dimension") {
+    return filterLooks(mode.dimension || autoScope, "all");
+  }
   if (mode.type === "random") {
-    if (!mode.category || mode.category === "all") return LOOKS;
-    return LOOKS.filter((l) => l.category === mode.category);
+    if (!mode.category || mode.category === "all") return filterLooks(autoScope, "all");
+    return filterLooks(autoScope, mode.category);
   }
   if (Array.isArray(mode.looks) && mode.looks.length > 0) {
-    return mode.looks.map((id) => lookById(id)).filter(Boolean);
+    return mode.looks.map((id) => lookById(id)).filter(Boolean).filter((l) => {
+      if (autoScope === "3d") return is3DLook(l);
+      if (autoScope === "2d") return !is3DLook(l);
+      return true;
+    });
   }
-  return LOOKS;
+  return filterLooks(autoScope, "all");
 }
 
 function tickRotate(now) {
@@ -419,7 +479,19 @@ function tickRotate(now) {
 function fillCategories() {
   if (!catBar) return;
   catBar.innerHTML = "";
-  for (const cat of CATEGORIES) {
+
+  const available = CATEGORIES.filter((cat) => {
+    if (cat.id === "all") return true;
+    if (dimension === "3d") return cat.id === "lidar";
+    if (dimension === "2d") return cat.id !== "lidar";
+    return true;
+  });
+
+  if (!available.some((c) => c.id === currentCategory)) {
+    currentCategory = "all";
+  }
+
+  for (const cat of available) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `cat-chip ${cat.id === currentCategory ? "active" : ""}`;
@@ -447,13 +519,17 @@ function fillRandomModes() {
   randomModeSelect.value = randomMode;
   if (vibeBadge) vibeBadge.textContent = randomModeById(randomMode).badge;
   randomModeSelect.addEventListener("change", () => {
-    setRandomMode(randomModeSelect.value, true);
+    const val = randomModeSelect.value;
+    setRandomMode(val, true);
+    if (val === "random_3d") setDimension("3d", true);
+    else if (val === "random_2d") setDimension("2d", true);
+    else if (val === "random_all") setDimension("all", true);
   });
 }
 
 function fillLooks() {
   looksEl.innerHTML = "";
-  const list = currentCategory === "all" ? LOOKS : LOOKS.filter((l) => l.category === currentCategory);
+  const list = filterLooks(dimension, currentCategory);
   for (const item of list) {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -713,6 +789,8 @@ function applyIncomingState(msg) {
   if (typeof msg.camMode === "string") setCamMode(msg.camMode, false);
   if (Number.isFinite(msg.camMix)) setCamMix(msg.camMix, false);
   if (Number.isFinite(msg.motionMask)) setMotionMask(msg.motionMask, false);
+  if (typeof msg.dimension === "string") setDimension(msg.dimension, false);
+  if (typeof msg.autoScope === "string") autoScope = msg.autoScope;
   if (typeof msg.auto === "boolean") {
     if (msg.auto && !autoMode) enterAutoMode(false);
     else if (!msg.auto && autoMode) exitAutoMode(false);
@@ -731,6 +809,8 @@ net.on((msg) => {
   if (msg.type === "setCamMode") setCamMode(msg.mode, false);
   if (msg.type === "setCamMix") setCamMix(msg.value, false);
   if (msg.type === "setMotionMask") setMotionMask(msg.value, false);
+  if (msg.type === "setDimension" && typeof msg.dimension === "string") setDimension(msg.dimension, false);
+  if (msg.type === "setAutoScope" && typeof msg.scope === "string") autoScope = msg.scope;
   if (msg.type === "setAuto" && typeof msg.enabled === "boolean") {
     if (msg.enabled && !autoMode) enterAutoMode(false);
     else if (!msg.enabled && autoMode) exitAutoMode(false);
@@ -743,6 +823,8 @@ net.on((msg) => {
     if (typeof msg.camMode === "string") setCamMode(msg.camMode, false);
     if (Number.isFinite(msg.camMix)) setCamMix(msg.camMix, false);
     if (Number.isFinite(msg.motionMask)) setMotionMask(msg.motionMask, false);
+    if (typeof msg.dimension === "string") setDimension(msg.dimension, false);
+    if (typeof msg.autoScope === "string") autoScope = msg.autoScope;
     if (typeof msg.auto === "boolean") {
       if (msg.auto && !autoMode) enterAutoMode(false);
       else if (!msg.auto && autoMode) exitAutoMode(false);
@@ -759,6 +841,7 @@ net.on((msg) => {
 fillCategories();
 fillRandomModes();
 fillLooks();
+setDimension(dimension, false);
 setLook(look, false);
 setIntensity(intensity, false);
 setHueShift(hueShift, false);
@@ -818,6 +901,12 @@ btnMotionMaskToggle?.addEventListener("click", () => setMotionMask(motionMask > 
 if (camModeChips) {
   for (const chip of camModeChips.querySelectorAll(".chip")) {
     chip.addEventListener("click", () => setCamMode(chip.dataset.cam));
+  }
+}
+
+if (dimBar) {
+  for (const chip of dimBar.querySelectorAll(".dim-chip")) {
+    chip.addEventListener("click", () => setDimension(chip.dataset.dim, true));
   }
 }
 
@@ -917,10 +1006,12 @@ function frame(now) {
     }
     if (motionMaskSlider) motionMaskSlider.value = String(Math.round(motionMask * 100));
 
-    // 4. Autonomous Look Switcher (10s morphing transitions)
+    // 4. Autonomous Look Switcher (10s morphing transitions within selected dimension)
     if (now >= autoLookTimer) {
-      const pool = LOOKS.filter((l) => l.id !== look);
-      const next = pool[Math.floor(Math.random() * pool.length)];
+      const mode = randomModeById(randomMode);
+      const pool = getModePool(mode);
+      const candidates = pool.filter((l) => l.id !== look);
+      const next = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : pool[0];
       if (next) {
         setLook(next.id, true, true, 10000);
         autoLookTimer = now + (20000 + Math.random() * 12000);

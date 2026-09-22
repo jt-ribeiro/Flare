@@ -223,6 +223,66 @@ body.projector #hud > * {
   box-shadow: 0 0 8px rgba(212, 255, 0, 0.3);
 }
 
+.dimension-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(14, 17, 23, 0.7);
+  padding: 4px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.dim-label {
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  padding: 0 4px;
+}
+
+.dim-chip {
+  appearance: none;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 4px 8px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dim-chip:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dim-chip.active {
+  background: rgba(0, 240, 255, 0.15);
+  border-color: var(--cyan);
+  color: var(--cyan);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+}
+
+.dim-chip[data-dim="3d"].active {
+  background: rgba(0, 240, 255, 0.18);
+  border-color: var(--cyan);
+  color: var(--cyan);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.4);
+}
+
+.dim-chip[data-dim="2d"].active {
+  background: rgba(212, 255, 0, 0.18);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 12px rgba(212, 255, 0, 0.4);
+}
+
 .cat-bar {
   display: flex;
   gap: 6px;
