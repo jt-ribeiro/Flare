@@ -1,5 +1,6 @@
 export const CATEGORIES = [
   { id: "all", name: "Todos" },
+  { id: "lidar", name: "🌌 3D LiDAR" },
   { id: "tekno", name: "☣️ Tekno" },
   { id: "glitch", name: "🧪 Glitch" },
   { id: "art", name: "🎨 Graffiti" },
@@ -8,6 +9,12 @@ export const CATEGORIES = [
 ];
 
 export const LOOKS = [
+  // 🌌 3D LIDAR (AFTERLIFE)
+  { id: "lidarAfterlife", name: "Afterlife 3D", hint: "Holograma Tale of Us", category: "lidar" },
+  { id: "lidarMatrix", name: "Matrix LiDAR", hint: "Laser verde volumétrico", category: "lidar" },
+  { id: "lidarGhost", name: "Spectral Embers", hint: "Partículas anti-gravidade", category: "lidar" },
+  { id: "lidarAcidTekno", name: "Acid Particle", hint: "Dispersão cromática 3D", category: "lidar" },
+
   // ☣️ TEKNO
   { id: "teknoStrobe", name: "Tekno Strobe", hint: "Estrobo 200 BPM", category: "tekno" },
   { id: "acidSpiral", name: "Acid Spiral", hint: "Túnel psicadélico", category: "tekno" },
@@ -54,10 +61,19 @@ export const RANDOM_MODES = [
   {
     id: "random_all",
     name: "🎲 Tudo Totalmente Random",
-    hint: "Qualquer dos 30 visuais",
+    hint: "Qualquer visual (2D & 3D LiDAR)",
     badge: "🎲 TUDO RANDOM",
     type: "random",
     category: "all",
+  },
+  // 🌌 3D LIDAR
+  {
+    id: "random_lidar",
+    name: "🌌 Random: 3D LiDAR (Afterlife)",
+    hint: "Apenas visuais 3D holográficos",
+    badge: "🌌 3D LIDAR",
+    type: "random",
+    category: "lidar",
   },
   // 📁 RANDOM POR CATEGORIA
   {
@@ -771,6 +787,52 @@ vec3 shade(vec2 uv) {
   float bar = step(uv.y, 0.09 * uIntensity) + step(1.0 - 0.09 * uIntensity, uv.y);
   c *= 1.0 - bar;
   return mix(orig, c, uIntensity);
+}
+`,
+  lidarAfterlife: `
+vec3 shade(vec2 uv) {
+  vec3 orig = vid(uv);
+  float l = luma(orig);
+  float mot = length(orig - texture(uPrevVideo, uv).rgb);
+  vec3 cyan = vec3(0.0, 0.94, 1.0);
+  vec3 gold = vec3(1.0, 0.84, 0.2);
+  vec3 holo = mix(cyan, gold, clamp(l * 1.3, 0.0, 1.0)) * (l * 1.8 + mot * 2.0);
+  holo += vec3(uBass * 0.3) * cyan;
+  return mix(orig * 0.2, holo, uIntensity);
+}
+`,
+  lidarMatrix: `
+vec3 shade(vec2 uv) {
+  vec3 orig = vid(uv);
+  float l = luma(orig);
+  float mot = length(orig - texture(uPrevVideo, uv).rgb);
+  float scan = sin(uv.y * 120.0 - uTime * 8.0);
+  vec3 green = vec3(0.05, 1.0, 0.35);
+  vec3 laser = green * (l * 2.0 + mot * 3.0) * (0.8 + 0.2 * scan);
+  return mix(orig * 0.15, laser, uIntensity);
+}
+`,
+  lidarGhost: `
+vec3 shade(vec2 uv) {
+  vec3 orig = vid(uv);
+  float l = luma(orig);
+  float mot = length(orig - texture(uPrevVideo, uv).rgb);
+  vec3 violet = vec3(0.68, 0.25, 1.0);
+  vec3 silver = vec3(0.88, 0.92, 1.0);
+  vec3 ghost = mix(violet, silver, l) * (l + mot * 2.5);
+  return mix(orig * 0.1, ghost, uIntensity);
+}
+`,
+  lidarAcidTekno: `
+vec3 shade(vec2 uv) {
+  vec3 orig = vid(uv);
+  float l = luma(orig);
+  float mot = length(orig - texture(uPrevVideo, uv).rgb);
+  vec3 acid = vec3(0.83, 1.0, 0.0);
+  vec3 pink = vec3(1.0, 0.0, 0.33);
+  vec3 pCol = mix(acid, pink, fract(uv.x * 3.0 + uTime * 0.5));
+  pCol *= (l * 1.6 + mot * 3.0 + uBass * 0.4);
+  return mix(orig * 0.15, pCol, uIntensity);
 }
 `,
 };
