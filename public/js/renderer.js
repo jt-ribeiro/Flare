@@ -81,6 +81,7 @@ function makeParticleGridBuffer(gl, cols = 320, rows = 180) {
 
 const LIDAR_VERT = `#version 300 es
 precision highp float;
+precision highp int;
 
 in vec2 aGridUv;
 
@@ -257,6 +258,7 @@ void main() {
 
 const LIDAR_FRAG = `#version 300 es
 precision highp float;
+precision highp int;
 
 in vec4 vColor;
 in float vDepth;
